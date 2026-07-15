@@ -1,4 +1,8 @@
 import { DataSource } from "typeorm";
+import dotenv from "dotenv";
+
+dotenv.config();
+dotenv.config({ path: ".env.local" });
 import {
   UserSchema,
   JobSchema,

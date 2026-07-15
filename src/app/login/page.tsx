@@ -2,7 +2,6 @@
 
 import { useActionState } from "react";
 import { loginAction, LoginState } from "@/app/actions/auth";
-import { USERS } from "@/lib/auth-config";
 
 const initialState: LoginState = { error: null };
 
@@ -114,59 +113,6 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-        </div>
-
-        {/* Demo credentials table */}
-        <div className="mt-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-4">
-            Demo Credentials — Test Users
-          </p>
-
-          {/* Group by role */}
-          {(["FOUNDER","RECRUITER","ADMIN","HIRING_MANAGER"] as const).map((roleKey) => {
-            const roleUsers = USERS.filter((u) => u.role === roleKey);
-            if (roleUsers.length === 0) return null;
-
-            const roleStyles: Record<string, { badge: string; desc: string }> = {
-              FOUNDER:        { badge: "bg-indigo-100 text-indigo-700",   desc: "Full access · Approves offers · Manages permissions" },
-              RECRUITER:      { badge: "bg-emerald-100 text-emerald-700", desc: "Add jobs · Ingest candidates · Move pipeline" },
-              ADMIN:          { badge: "bg-amber-100 text-amber-700",     desc: "Add jobs · View audit log · No offer approval" },
-              HIRING_MANAGER: { badge: "bg-violet-100 text-violet-700",   desc: "Edit scorecards · View analytics only" },
-            };
-            const style = roleStyles[roleKey];
-
-            return (
-              <div key={roleKey} className="mb-4 last:mb-0">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${style.badge}`}>
-                    {roleKey.replace("_", " ")}
-                  </span>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500">{style.desc}</span>
-                </div>
-                <div className="space-y-1.5 pl-1">
-                  {roleUsers.map((u) => (
-                    <div
-                      key={u.id}
-                      className="flex items-center justify-between text-[11px] bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-lg px-3 py-2"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded-full bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300 flex items-center justify-center text-[9px] font-bold flex-shrink-0">
-                          {u.name.charAt(0)}
-                        </div>
-                        <div>
-                          <p className="font-semibold text-slate-700 dark:text-slate-300">{u.name}</p>
-                          <p className="text-[10px] text-slate-400 dark:text-slate-500">{u.email}</p>
-                        </div>
-                      </div>
-                      <span className="font-mono text-slate-500 dark:text-slate-400 text-[10px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-md">
-                        {u.password}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
         </div>
 
         <p className="text-center text-[10px] text-slate-400 dark:text-slate-600 mt-6">
