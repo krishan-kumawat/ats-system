@@ -1,7 +1,6 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { USERS } from "@/lib/auth-config";
 import { createSession, destroySession } from "@/lib/auth";
 
 export interface LoginState {
@@ -20,46 +19,36 @@ export async function loginAction(
   }
 
   let shouldRedirect = false;
-  // ── Try DB auth if DATABASE_URL is set ─────────────────────────────────────
-  if (process.env.DATABASE_URL) {
-    try {
-      const { withDb } = await import("@/db/data-source");
-      const dbUser = await withDb((ds) =>
-        ds.getRepository("User").findOne({ where: { email } })
-      ) as { id: string; name: string; email: string; role: string; passwordHash: string; isActive: boolean } | null;
+  
+  try {
+    const { withDb } = await import("@/db/data-source");
+    const dbUser = await withDb((ds) =>
+      ds.getRepository("User").findOne({ where: { email } })
+    ) as { id: string; name: string; email: string; role: string; passwordHash: string; isActive: boolean } | null;
 
-      if (dbUser) {
-        if (dbUser.passwordHash !== password) {
-          return { error: "Invalid email or password." };
-        }
-        if (dbUser.isActive === false) {
-          return { error: "Your account has been deactivated. Contact the Founder." };
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await createSession(dbUser as any);
-        shouldRedirect = true;
+    if (dbUser) {
+      if (dbUser.passwordHash !== password) {
+        return { error: "Invalid email or password." };
       }
-      // Fall through to static list if user not in DB
-    } catch (err) {
-      console.error("[loginAction] DB error, falling back to static users:", err);
+      if (dbUser.isActive === false) {
+        return { error: "Your account has been deactivated. Contact the Founder." };
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await createSession(dbUser as any);
+      shouldRedirect = true;
+    } else {
+      return { error: "Invalid email or password." };
     }
+  } catch (err: any) {
+    console.error("[loginAction] DB authentication error:", err);
+    return { error: "Authentication service is temporarily unavailable. Please try again later." };
   }
 
   if (shouldRedirect) {
     redirect("/");
   }
 
-  // ── Fallback: static USERS list ────────────────────────────────────────────
-  const user = USERS.find(
-    (u) => u.email.toLowerCase() === email && u.password === password
-  );
-
-  if (!user) {
-    return { error: "Invalid email or password." };
-  }
-
-  await createSession(user);
-  redirect("/");
+  return { error: "Invalid email or password." };
 }
 
 export async function logoutAction(): Promise<void> {
