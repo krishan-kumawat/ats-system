@@ -21,10 +21,9 @@ export async function loginAction(
   let shouldRedirect = false;
   
   try {
-    const { withDb } = await import("@/db/data-source");
-    const dbUser = await withDb((ds) =>
-      ds.getRepository("User").findOne({ where: { email } })
-    ) as { id: string; name: string; email: string; role: string; passwordHash: string; isActive: boolean } | null;
+    const { readDb } = await import("@/db/local-db");
+    const db = readDb();
+    const dbUser = db.users.find((u) => u.email === email) || null;
 
     if (dbUser) {
       if (dbUser.passwordHash !== password) {
@@ -33,14 +32,13 @@ export async function loginAction(
       if (dbUser.isActive === false) {
         return { error: "Your account has been deactivated. Contact the Founder." };
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await createSession(dbUser as any);
       shouldRedirect = true;
     } else {
       return { error: "Invalid email or password." };
     }
   } catch (err: any) {
-    console.error("[loginAction] DB authentication error:", err);
+    console.error("[loginAction] local DB authentication error:", err);
     return { error: "Authentication service is temporarily unavailable. Please try again later." };
   }
 

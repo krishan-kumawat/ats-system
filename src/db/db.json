@@ -1,0 +1,629 @@
+{
+  "users": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "Arjun Mehta",
+      "email": "founder@orgats.com",
+      "role": "FOUNDER",
+      "passwordHash": "Founder@123",
+      "isActive": true,
+      "createdAt": "2026-07-18T19:26:48.951Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "Priya Sharma",
+      "email": "recruiter@orgats.com",
+      "role": "RECRUITER",
+      "passwordHash": "Recruiter@123",
+      "isActive": true,
+      "createdAt": "2026-07-18T19:26:48.951Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "Rohan Verma",
+      "email": "admin@orgats.com",
+      "role": "ADMIN",
+      "passwordHash": "Admin@123",
+      "isActive": true,
+      "createdAt": "2026-07-18T19:26:48.951Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "Neha Kapoor",
+      "email": "hiring@orgats.com",
+      "role": "HIRING_MANAGER",
+      "passwordHash": "Hiring@123",
+      "isActive": true,
+      "createdAt": "2026-07-18T19:26:48.951Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000005",
+      "name": "Kiran Desai",
+      "email": "recruiter2@orgats.com",
+      "role": "RECRUITER",
+      "passwordHash": "Recruiter2@123",
+      "isActive": true,
+      "createdAt": "2026-07-18T19:26:48.951Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000006",
+      "name": "Samira Bose",
+      "email": "admin2@orgats.com",
+      "role": "ADMIN",
+      "passwordHash": "Admin2@123",
+      "isActive": true,
+      "createdAt": "2026-07-18T19:26:48.951Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000007",
+      "name": "Dev Anand",
+      "email": "hiring2@orgats.com",
+      "role": "HIRING_MANAGER",
+      "passwordHash": "Hiring2@123",
+      "isActive": true,
+      "createdAt": "2026-07-18T19:26:48.951Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000008",
+      "name": "Meera Iyer",
+      "email": "headofhr@orgats.com",
+      "role": "HEAD_OF_HR",
+      "passwordHash": "HeadHR@123",
+      "isActive": true,
+      "createdAt": "2026-07-18T19:26:48.951Z"
+    }
+  ],
+  "jobs": [
+    {
+      "id": "job-eng-104",
+      "title": "Senior Frontend Engineer",
+      "department": "Engineering",
+      "hiringManagerId": "00000000-0000-0000-0000-000000000003",
+      "hiringManagerName": "Rohan Verma",
+      "status": "OPEN",
+      "gDriveFolderId": null,
+      "budgetLimit": 160000,
+      "createdAt": "2026-06-20T00:00:00.000Z"
+    },
+    {
+      "id": "job-eng-105",
+      "title": "Lead Data Scientist",
+      "department": "Engineering",
+      "hiringManagerId": "00000000-0000-0000-0000-000000000004",
+      "hiringManagerName": "Neha Kapoor",
+      "status": "OPEN",
+      "gDriveFolderId": null,
+      "budgetLimit": 180000,
+      "createdAt": "2026-06-22T00:00:00.000Z"
+    },
+    {
+      "id": "job-prd-201",
+      "title": "Principal Product Manager",
+      "department": "Product",
+      "hiringManagerId": "00000000-0000-0000-0000-000000000001",
+      "hiringManagerName": "Arjun Mehta",
+      "status": "OPEN",
+      "gDriveFolderId": null,
+      "budgetLimit": 175000,
+      "createdAt": "2026-06-25T00:00:00.000Z"
+    }
+  ],
+  "candidates": [
+    {
+      "id": "a1ce0000-0000-4000-8000-000000000001",
+      "name": "Alice Chen",
+      "email": "alice.chen@techmail.io",
+      "phone": "+1 555-0142",
+      "currentCompany": null,
+      "skills": [
+        "React",
+        "TypeScript",
+        "Tailwind CSS",
+        "Next.js",
+        "Jest"
+      ],
+      "createdAt": "2026-06-20T00:00:00.000Z"
+    },
+    {
+      "id": "b0b00000-0000-4000-8000-000000000002",
+      "name": "Bob Smith",
+      "email": "bob.smith@datascience.net",
+      "phone": "+1 555-0189",
+      "currentCompany": null,
+      "skills": [
+        "Python",
+        "PyTorch",
+        "SQL",
+        "Pandas",
+        "Scikit-Learn"
+      ],
+      "createdAt": "2026-06-22T00:00:00.000Z"
+    },
+    {
+      "id": "c1a20000-0000-4000-8000-000000000003",
+      "name": "Clara Rodriguez",
+      "email": "clara.rod@productco.org",
+      "phone": "+1 555-0199",
+      "currentCompany": null,
+      "skills": [
+        "Product Strategy",
+        "SQL",
+        "Agile Roadmap",
+        "A/B Testing",
+        "Figma"
+      ],
+      "createdAt": "2026-06-25T00:00:00.000Z"
+    }
+  ],
+  "applications": [
+    {
+      "id": "a9900000-0000-4000-8000-000000000001",
+      "candidateId": "a1ce0000-0000-4000-8000-000000000001",
+      "jobId": "job-eng-104",
+      "stage": "APPLIED",
+      "sourceTag": "Manual PDF Upload",
+      "gDriveFileId": "gdrive_sim_alice_001",
+      "gDriveViewUrl": "https://drive.google.com/file/d/gdrive_sim_alice_001/view",
+      "expectedSalary": 145000,
+      "assignedHiringManagerId": null,
+      "createdAt": "2026-06-20T00:00:00.000Z"
+    },
+    {
+      "id": "b0900000-0000-4000-8000-000000000002",
+      "candidateId": "b0b00000-0000-4000-8000-000000000002",
+      "jobId": "job-eng-105",
+      "stage": "SCREENING",
+      "sourceTag": "Referral",
+      "gDriveFileId": "gdrive_sim_bob_002",
+      "gDriveViewUrl": "https://drive.google.com/file/d/gdrive_sim_bob_002/view",
+      "expectedSalary": 165000,
+      "assignedHiringManagerId": null,
+      "createdAt": "2026-06-22T00:00:00.000Z"
+    },
+    {
+      "id": "c0900000-0000-4000-8000-000000000003",
+      "candidateId": "c1a20000-0000-4000-8000-000000000003",
+      "jobId": "job-prd-201",
+      "stage": "OFFER_PREP",
+      "sourceTag": "Manual PDF Ingest",
+      "gDriveFileId": "gdrive_sim_clara_003",
+      "gDriveViewUrl": "https://drive.google.com/file/d/gdrive_sim_clara_003/view",
+      "expectedSalary": 160000,
+      "assignedHiringManagerId": null,
+      "createdAt": "2026-06-25T00:00:00.000Z"
+    }
+  ],
+  "scorecards": [
+    {
+      "id": "5c0b0000-0000-4000-8000-000000000002",
+      "applicationId": "b0900000-0000-4000-8000-000000000002",
+      "reviewerId": "00000000-0000-0000-0000-000000000004",
+      "technicalScore": 4,
+      "systemScore": 3,
+      "cultureScore": 5,
+      "pros": "Excellent research background.",
+      "cons": "Needs tooling adjustment.",
+      "recommendation": "HIRE",
+      "createdAt": "2026-06-23T00:00:00.000Z"
+    },
+    {
+      "id": "5cc1a000-0000-4000-8000-000000000003",
+      "applicationId": "c0900000-0000-4000-8000-000000000003",
+      "reviewerId": "00000000-0000-0000-0000-000000000004",
+      "technicalScore": 5,
+      "systemScore": 4,
+      "cultureScore": 5,
+      "pros": "Exceptional startup scaling background.",
+      "cons": "Needs steering on infra constraints.",
+      "recommendation": "STRONG_HIRE",
+      "createdAt": "2026-06-26T00:00:00.000Z"
+    }
+  ],
+  "founderApprovals": [
+    {
+      "id": "fa000000-0000-4000-8000-000000000003",
+      "applicationId": "c0900000-0000-4000-8000-000000000003",
+      "founderId": null,
+      "proposedSalary": 160000,
+      "proposedEquity": 0.0015,
+      "status": "PENDING",
+      "feedback": null,
+      "createdAt": "2026-06-26T00:00:00.000Z",
+      "actionedAt": null
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": 1,
+      "userId": "00000000-0000-0000-0000-000000000002",
+      "action": "CREATED_JOB",
+      "targetTable": "jobs",
+      "targetId": "job-eng-104",
+      "notes": "Initialized folder structures inside Company_ATS_Storage/.",
+      "oldValues": null,
+      "newValues": {
+        "jobId": "job-eng-104",
+        "title": "Senior Frontend Engineer"
+      },
+      "timestamp": "2026-06-20T10:24:00.000Z"
+    },
+    {
+      "id": 2,
+      "userId": "00000000-0000-0000-0000-000000000002",
+      "action": "INGESTED_PROFILE",
+      "targetTable": "candidates",
+      "targetId": "a1ce0000-0000-4000-8000-000000000001",
+      "notes": "Manual resume PDF streamed to Google Drive. Skills parser complete.",
+      "oldValues": null,
+      "newValues": {
+        "name": "Alice Chen"
+      },
+      "timestamp": "2026-06-20T10:28:00.000Z"
+    },
+    {
+      "id": 3,
+      "userId": "00000000-0000-0000-0000-000000000002",
+      "action": "STAGE_TRANSITION",
+      "targetTable": "applications",
+      "targetId": "c0900000-0000-4000-8000-000000000003",
+      "notes": "Moved stage: Interviewing -> Offer Prep. Secure gate triggered.",
+      "oldValues": {
+        "stage": "INTERVIEWING"
+      },
+      "newValues": {
+        "stage": "OFFER_PREP"
+      },
+      "timestamp": "2026-06-25T11:02:00.000Z"
+    },
+    {
+      "id": 4,
+      "userId": "00000000-0000-0000-0000-000000000001",
+      "action": "PERMISSION_CHANGE",
+      "targetTable": "role_permissions",
+      "targetId": "RECRUITER",
+      "notes": "canIngestCandidate: OFF",
+      "oldValues": null,
+      "newValues": {
+        "canAddJob": true,
+        "canIngestCandidate": false,
+        "canDragPipeline": true,
+        "canViewAuditLog": false,
+        "canApproveOffer": false,
+        "canViewAnalytics": true,
+        "canEditScorecard": false,
+        "canManagePermissions": false,
+        "canAssignJobs": false
+      },
+      "timestamp": "2026-07-18T19:27:01.211Z"
+    },
+    {
+      "id": 5,
+      "userId": "00000000-0000-0000-0000-000000000001",
+      "action": "PERMISSION_CHANGE",
+      "targetTable": "role_permissions",
+      "targetId": "Recruiter",
+      "notes": "Updated: Ingest Candidates: OFF",
+      "oldValues": null,
+      "newValues": null,
+      "timestamp": "2026-07-18T19:27:01.318Z"
+    }
+  ],
+  "rolePermissions": [
+    {
+      "id": 1,
+      "role": "FOUNDER",
+      "permissionKey": "canAddJob",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 2,
+      "role": "FOUNDER",
+      "permissionKey": "canIngestCandidate",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 3,
+      "role": "FOUNDER",
+      "permissionKey": "canDragPipeline",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 4,
+      "role": "FOUNDER",
+      "permissionKey": "canViewAuditLog",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 5,
+      "role": "FOUNDER",
+      "permissionKey": "canApproveOffer",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 6,
+      "role": "FOUNDER",
+      "permissionKey": "canViewAnalytics",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 7,
+      "role": "FOUNDER",
+      "permissionKey": "canEditScorecard",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 8,
+      "role": "FOUNDER",
+      "permissionKey": "canManagePermissions",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 9,
+      "role": "FOUNDER",
+      "permissionKey": "canAssignJobs",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 10,
+      "role": "RECRUITER",
+      "permissionKey": "canAddJob",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:27:01.211Z"
+    },
+    {
+      "id": 11,
+      "role": "RECRUITER",
+      "permissionKey": "canIngestCandidate",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:27:01.211Z"
+    },
+    {
+      "id": 12,
+      "role": "RECRUITER",
+      "permissionKey": "canDragPipeline",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:27:01.211Z"
+    },
+    {
+      "id": 13,
+      "role": "RECRUITER",
+      "permissionKey": "canViewAuditLog",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:27:01.211Z"
+    },
+    {
+      "id": 14,
+      "role": "RECRUITER",
+      "permissionKey": "canApproveOffer",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:27:01.211Z"
+    },
+    {
+      "id": 15,
+      "role": "RECRUITER",
+      "permissionKey": "canViewAnalytics",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:27:01.211Z"
+    },
+    {
+      "id": 16,
+      "role": "RECRUITER",
+      "permissionKey": "canEditScorecard",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:27:01.211Z"
+    },
+    {
+      "id": 17,
+      "role": "RECRUITER",
+      "permissionKey": "canManagePermissions",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:27:01.211Z"
+    },
+    {
+      "id": 18,
+      "role": "RECRUITER",
+      "permissionKey": "canAssignJobs",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:27:01.211Z"
+    },
+    {
+      "id": 19,
+      "role": "ADMIN",
+      "permissionKey": "canAddJob",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 20,
+      "role": "ADMIN",
+      "permissionKey": "canIngestCandidate",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 21,
+      "role": "ADMIN",
+      "permissionKey": "canDragPipeline",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 22,
+      "role": "ADMIN",
+      "permissionKey": "canViewAuditLog",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 23,
+      "role": "ADMIN",
+      "permissionKey": "canApproveOffer",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 24,
+      "role": "ADMIN",
+      "permissionKey": "canViewAnalytics",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 25,
+      "role": "ADMIN",
+      "permissionKey": "canEditScorecard",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 26,
+      "role": "ADMIN",
+      "permissionKey": "canManagePermissions",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 27,
+      "role": "ADMIN",
+      "permissionKey": "canAssignJobs",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 28,
+      "role": "HIRING_MANAGER",
+      "permissionKey": "canAddJob",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 29,
+      "role": "HIRING_MANAGER",
+      "permissionKey": "canIngestCandidate",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 30,
+      "role": "HIRING_MANAGER",
+      "permissionKey": "canDragPipeline",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 31,
+      "role": "HIRING_MANAGER",
+      "permissionKey": "canViewAuditLog",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 32,
+      "role": "HIRING_MANAGER",
+      "permissionKey": "canApproveOffer",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 33,
+      "role": "HIRING_MANAGER",
+      "permissionKey": "canViewAnalytics",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 34,
+      "role": "HIRING_MANAGER",
+      "permissionKey": "canEditScorecard",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 35,
+      "role": "HIRING_MANAGER",
+      "permissionKey": "canManagePermissions",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 36,
+      "role": "HIRING_MANAGER",
+      "permissionKey": "canAssignJobs",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 37,
+      "role": "HEAD_OF_HR",
+      "permissionKey": "canAddJob",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 38,
+      "role": "HEAD_OF_HR",
+      "permissionKey": "canIngestCandidate",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 39,
+      "role": "HEAD_OF_HR",
+      "permissionKey": "canDragPipeline",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 40,
+      "role": "HEAD_OF_HR",
+      "permissionKey": "canViewAuditLog",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 41,
+      "role": "HEAD_OF_HR",
+      "permissionKey": "canApproveOffer",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 42,
+      "role": "HEAD_OF_HR",
+      "permissionKey": "canViewAnalytics",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 43,
+      "role": "HEAD_OF_HR",
+      "permissionKey": "canEditScorecard",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 44,
+      "role": "HEAD_OF_HR",
+      "permissionKey": "canManagePermissions",
+      "granted": false,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    },
+    {
+      "id": 45,
+      "role": "HEAD_OF_HR",
+      "permissionKey": "canAssignJobs",
+      "granted": true,
+      "updatedAt": "2026-07-18T19:26:48.952Z"
+    }
+  ],
+  "jobAssignments": []
+}

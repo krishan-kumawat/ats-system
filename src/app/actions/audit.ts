@@ -1,7 +1,6 @@
 "use server";
 
-import { withDb } from "@/db/data-source";
-import { IAuditLog } from "@/db/schemas";
+import { readDb, writeDb } from "@/db/local-db";
 import { getSession } from "@/lib/auth";
 import { AuditEntry } from "@/lib/atsStore";
 
@@ -16,38 +15,40 @@ export interface WriteAuditInput {
 
 export async function writeAuditAction(input: WriteAuditInput): Promise<void> {
   const session = await getSession();
-  if (!session || !process.env.DATABASE_URL) return;
+  if (!session) return;
 
   try {
-    await withDb(async (ds) => {
-      const auditRepo = ds.getRepository<IAuditLog>("AuditLog");
-      await auditRepo.save(
-        auditRepo.create({
-          userId: session.id,
-          action: input.action,
-          targetTable: input.targetTable,
-          targetId: input.targetId,
-          notes: input.notes ?? null,
-          oldValues: input.oldValues ?? null,
-          newValues: input.newValues ?? null,
-        })
-      );
-    });
+    const db = readDb();
+    const nextId = db.auditLogs.length > 0
+      ? Math.max(...db.auditLogs.map((l) => l.id || 0)) + 1
+      : 1;
+
+    const newLog = {
+      id: nextId,
+      userId: session.id,
+      action: input.action,
+      targetTable: input.targetTable,
+      targetId: input.targetId,
+      notes: input.notes ?? null,
+      oldValues: input.oldValues ?? null,
+      newValues: input.newValues ?? null,
+      timestamp: new Date(),
+    };
+
+    db.auditLogs.push(newLog);
+    writeDb(db);
   } catch (err) {
     console.error("[writeAuditAction]", err);
   }
 }
 
 export async function fetchAuditLogsAction(): Promise<AuditEntry[]> {
-  if (!process.env.DATABASE_URL) return [];
-
   try {
-    const logs = await withDb((ds) =>
-      ds.getRepository<IAuditLog>("AuditLog").find({
-        order: { timestamp: "ASC" },
-        take: 200,
-      })
-    );
+    const db = readDb();
+    // Sort logs ascending by timestamp and take up to 200 entries
+    const logs = [...db.auditLogs]
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+      .slice(0, 200);
 
     return logs.map((l) => ({
       timestamp: l.timestamp instanceof Date

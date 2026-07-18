@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { v4 as uuidv4 } from "uuid";
-import { withDb } from "@/db/data-source";
-import { IUser, IJobAssignment, IAuditLog } from "@/db/schemas";
+import { readDb, writeDb } from "@/db/local-db";
 import { UserRole } from "@/lib/enums";
 import { getSession } from "@/lib/auth";
 
@@ -38,60 +37,33 @@ export interface AssignJobInput {
 // ─── Fetch all assignments ────────────────────────────────────────────────────
 
 export async function fetchAssignmentsAction(): Promise<AssignmentRow[]> {
-  if (!process.env.DATABASE_URL) return [];
-
   try {
-    const rows = await withDb((ds) =>
-      ds.query(`
-        SELECT
-          ja.id,
-          ja."jobId",
-          j.title        AS "jobTitle",
-          j.department,
-          ja."assignedToId",
-          u1.name        AS "assignedToName",
-          u1.email       AS "assignedToEmail",
-          u1.role        AS "assignedToRole",
-          u2.name        AS "assignedByName",
-          ja.note,
-          ja."assignedAt"
-        FROM job_assignments ja
-        JOIN jobs  j  ON j.id  = ja."jobId"
-        JOIN users u1 ON u1.id = ja."assignedToId"
-        JOIN users u2 ON u2.id = ja."assignedById"
-        ORDER BY ja."assignedAt" DESC
-      `)
-    ) as Array<{
-      id: string;
-      jobId: string;
-      jobTitle: string;
-      department: string;
-      assignedToId: string;
-      assignedToName: string;
-      assignedToEmail: string;
-      assignedToRole: string;
-      assignedByName: string;
-      note: string | null;
-      assignedAt: Date | string;
-    }>;
+    const db = readDb();
 
-    return rows.map((r) => ({
-      id: r.id,
-      jobId: r.jobId,
-      jobTitle: r.jobTitle,
-      department: r.department,
-      assignedToId: r.assignedToId,
-      assignedToName: r.assignedToName,
-      assignedToEmail: r.assignedToEmail,
-      assignedToRole: r.assignedToRole,
-      assignedByName: r.assignedByName,
-      note: r.note ?? "",
-      assignedAt: r.assignedAt instanceof Date
-        ? r.assignedAt.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-        : r.assignedAt
-          ? new Date(r.assignedAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-          : "",
-    }));
+    const rows = db.jobAssignments.map((ja) => {
+      const job = db.jobs.find((j) => j.id === ja.jobId);
+      const assignedTo = db.users.find((u) => u.id === ja.assignedToId);
+      const assignedBy = db.users.find((u) => u.id === ja.assignedById);
+
+      return {
+        id: ja.id,
+        jobId: ja.jobId,
+        jobTitle: job?.title ?? "",
+        department: job?.department ?? "",
+        assignedToId: ja.assignedToId,
+        assignedToName: assignedTo?.name ?? "",
+        assignedToEmail: assignedTo?.email ?? "",
+        assignedToRole: assignedTo?.role ?? "",
+        assignedByName: assignedBy?.name ?? "",
+        note: ja.note ?? "",
+        assignedAt: ja.assignedAt instanceof Date
+          ? ja.assignedAt.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+          : String(ja.assignedAt),
+      };
+    });
+
+    // Sort by assignedAt DESC
+    return rows.sort((a, b) => new Date(b.assignedAt).getTime() - new Date(a.assignedAt).getTime());
   } catch (err) {
     console.error("[fetchAssignmentsAction]", err);
     return [];
@@ -108,18 +80,13 @@ export interface UserOption {
 }
 
 export async function fetchAssignableUsersAction(): Promise<UserOption[]> {
-  if (!process.env.DATABASE_URL) return [];
-
   try {
-    const rows = await withDb((ds) =>
-      ds.getRepository<IUser>("User").find({
-        order: { name: "ASC" },
-      })
-    );
+    const db = readDb();
 
-    return rows
+    return db.users
       .filter((u) => u.role !== UserRole.FOUNDER)
-      .map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role }));
+      .map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   } catch (err) {
     console.error("[fetchAssignableUsersAction]", err);
     return [];
@@ -129,18 +96,13 @@ export async function fetchAssignableUsersAction(): Promise<UserOption[]> {
 // ─── Fetch users who can act as Hiring Manager (HIRING_MANAGER + HEAD_OF_HR) ──
 
 export async function fetchHiringManagerUsersAction(): Promise<UserOption[]> {
-  if (!process.env.DATABASE_URL) return [];
-
   try {
-    const rows = await withDb((ds) =>
-      ds.query(
-        `SELECT id, name, email, role FROM users
-         WHERE role IN ('HIRING_MANAGER', 'HEAD_OF_HR')
-         ORDER BY name ASC`
-      )
-    ) as Array<{ id: string; name: string; email: string; role: UserRole }>;
+    const db = readDb();
 
-    return rows.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role }));
+    return db.users
+      .filter((u) => u.role === UserRole.HIRING_MANAGER || u.role === UserRole.HEAD_OF_HR)
+      .map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   } catch (err) {
     console.error("[fetchHiringManagerUsersAction]", err);
     return [];
@@ -158,42 +120,36 @@ export async function reassignApplicantHMAction(
   if (session.role !== UserRole.HEAD_OF_HR && session.role !== UserRole.FOUNDER) {
     return { error: "Only Head of HR or Founder can reassign hiring managers." };
   }
-  if (!process.env.DATABASE_URL) return { error: "Database not configured." };
 
   try {
-    await withDb(async (ds) => {
-      // Fetch old HM name for audit
-      const oldRow = await ds.query(
-        `SELECT a."assignedHiringManagerId", j."hiringManagerName"
-         FROM applications a
-         LEFT JOIN jobs j ON j.id = a."jobId"
-         WHERE a.id = $1`,
-        [applicationId]
-      ) as Array<{ assignedHiringManagerId: string | null; hiringManagerName: string }>;
+    const db = readDb();
 
-      const newHM = await ds.query(
-        `SELECT name FROM users WHERE id = $1`,
-        [newHiringManagerId]
-      ) as Array<{ name: string }>;
+    const app = db.applications.find((a) => a.id === applicationId);
+    if (!app) throw new Error("Application not found.");
 
-      await ds.query(
-        `UPDATE applications SET "assignedHiringManagerId" = $1 WHERE id = $2`,
-        [newHiringManagerId, applicationId]
-      );
+    const job = db.jobs.find((j) => j.id === app.jobId);
+    const newHM = db.users.find((u) => u.id === newHiringManagerId);
 
-      const auditRepo = ds.getRepository<IAuditLog>("AuditLog");
-      await auditRepo.save(
-        auditRepo.create({
-          userId: session.id,
-          action: "HM_REASSIGNED",
-          targetTable: "applications",
-          targetId: applicationId,
-          notes: `Hiring Manager reassigned to ${newHM[0]?.name ?? newHiringManagerId}.`,
-          oldValues: { hiringManager: oldRow[0]?.assignedHiringManagerId ?? oldRow[0]?.hiringManagerName },
-          newValues: { hiringManagerId: newHiringManagerId, name: newHM[0]?.name },
-        })
-      );
+    const oldHMVal = app.assignedHiringManagerId || job?.hiringManagerName || "Unassigned";
+    app.assignedHiringManagerId = newHiringManagerId;
+
+    const nextLogId = db.auditLogs.length > 0
+      ? Math.max(...db.auditLogs.map((l) => l.id || 0)) + 1
+      : 1;
+
+    db.auditLogs.push({
+      id: nextLogId,
+      userId: session.id,
+      action: "HM_REASSIGNED",
+      targetTable: "applications",
+      targetId: applicationId,
+      notes: `Hiring Manager reassigned to ${newHM?.name ?? newHiringManagerId}.`,
+      oldValues: { hiringManager: oldHMVal },
+      newValues: { hiringManagerId: newHiringManagerId, name: newHM?.name },
+      timestamp: new Date(),
     });
+
+    writeDb(db);
 
     revalidatePath("/");
     return {};
@@ -213,85 +169,89 @@ export async function assignJobAction(
   if (session.role !== UserRole.HEAD_OF_HR && session.role !== UserRole.FOUNDER) {
     return { error: "Only Head of HR or Founder can assign job requisitions." };
   }
-  if (!process.env.DATABASE_URL) return { error: "Database not configured." };
 
   try {
-    await withDb(async (ds) => {
-      const userRepo = ds.getRepository<IUser>("User");
-      const assignmentRepo = ds.getRepository<IJobAssignment>("JobAssignment");
-      const auditRepo = ds.getRepository<IAuditLog>("AuditLog");
+    const db = readDb();
+    let assignedToId = input.assignedToId;
 
-      let assignedToId = input.assignedToId;
+    // Create user if they don't exist
+    if (!assignedToId) {
+      if (!input.newUser) throw new Error("Provide either assignedToId or newUser details.");
 
-      // Create user if they don't exist
-      if (!assignedToId) {
-        if (!input.newUser) throw new Error("Provide either assignedToId or newUser details.");
-
-        const existing = await userRepo.findOne({ where: { email: input.newUser.email } });
-        if (existing) {
-          assignedToId = existing.id;
-        } else {
-          const created = await userRepo.save(
-            userRepo.create({
-              id: uuidv4(),
-              name: input.newUser.name,
-              email: input.newUser.email,
-              role: input.newUser.role,
-              passwordHash: input.newUser.password,
-            })
-          );
-          assignedToId = created.id;
-
-          await auditRepo.save(
-            auditRepo.create({
-              userId: session.id,
-              action: "USER_CREATED",
-              targetTable: "users",
-              targetId: created.id,
-              notes: `New user created during job assignment. Role: ${input.newUser.role}.`,
-              oldValues: null,
-              newValues: { name: input.newUser.name, email: input.newUser.email, role: input.newUser.role },
-            })
-          );
-        }
-      }
-
-      // Upsert — if already assigned, update the note; else insert fresh
-      const existing = await assignmentRepo.findOne({
-        where: { jobId: input.jobId, assignedToId },
-      });
-
+      const existing = db.users.find((u) => u.email === input.newUser!.email.trim().toLowerCase());
       if (existing) {
-        await ds.query(
-          `UPDATE job_assignments SET note = $1, "assignedById" = $2, "assignedAt" = NOW() WHERE id = $3`,
-          [input.note ?? null, session.id, existing.id]
-        );
+        assignedToId = existing.id;
       } else {
-        await assignmentRepo.save(
-          assignmentRepo.create({
-            id: uuidv4(),
-            jobId: input.jobId,
-            assignedToId,
-            assignedById: session.id,
-            note: input.note ?? null,
-          })
-        );
-      }
+        const createdId = uuidv4();
+        const createdUser = {
+          id: createdId,
+          name: input.newUser.name,
+          email: input.newUser.email.trim().toLowerCase(),
+          role: input.newUser.role,
+          passwordHash: input.newUser.password,
+          isActive: true,
+          createdAt: new Date(),
+        };
+        db.users.push(createdUser);
+        assignedToId = createdId;
 
-      const assignedUser = await userRepo.findOne({ where: { id: assignedToId } });
+        const nextLogId1 = db.auditLogs.length > 0
+          ? Math.max(...db.auditLogs.map((l) => l.id || 0)) + 1
+          : 1;
 
-      await auditRepo.save(
-        auditRepo.create({
+        db.auditLogs.push({
+          id: nextLogId1,
           userId: session.id,
-          action: "JOB_ASSIGNED",
-          targetTable: "job_assignments",
-          targetId: input.jobId,
-          notes: `Job assigned to ${assignedUser?.name ?? assignedToId}. ${input.note ? `Note: ${input.note}` : ""}`,
+          action: "USER_CREATED",
+          targetTable: "users",
+          targetId: createdUser.id,
+          notes: `New user created during job assignment. Role: ${input.newUser.role}.`,
           oldValues: null,
-          newValues: { jobId: input.jobId, assignedToId, assignedById: session.id },
-        })
-      );
+          newValues: { name: input.newUser.name, email: input.newUser.email, role: input.newUser.role },
+          timestamp: new Date(),
+        });
+      }
+    }
+
+    // Upsert — if already assigned, update the note; else insert fresh
+    const existingAssign = db.jobAssignments.find(
+      (ja) => ja.jobId === input.jobId && ja.assignedToId === assignedToId
+    );
+
+    if (existingAssign) {
+      existingAssign.note = input.note ?? null;
+      existingAssign.assignedById = session.id;
+      existingAssign.assignedAt = new Date();
+    } else {
+      db.jobAssignments.push({
+        id: uuidv4(),
+        jobId: input.jobId,
+        assignedToId: assignedToId!,
+        assignedById: session.id,
+        note: input.note ?? null,
+        assignedAt: new Date(),
+      });
+    }
+
+    const assignedUser = db.users.find((u) => u.id === assignedToId);
+
+    const nextLogId2 = db.auditLogs.length > 0
+      ? Math.max(...db.auditLogs.map((l) => l.id || 0)) + 1
+      : 1;
+
+    db.auditLogs.push({
+      id: nextLogId2,
+      userId: session.id,
+      action: "JOB_ASSIGNED",
+      targetTable: "job_assignments",
+      targetId: input.jobId,
+      notes: `Job assigned to ${assignedUser?.name ?? assignedToId}. ${input.note ? `Note: ${input.note}` : ""}`,
+      oldValues: null,
+      newValues: { jobId: input.jobId, assignedToId, assignedById: session.id },
+      timestamp: new Date(),
     });
+
+    writeDb(db);
 
     revalidatePath("/");
     return {};
@@ -311,25 +271,29 @@ export async function revokeAssignmentAction(
   if (session.role !== UserRole.HEAD_OF_HR && session.role !== UserRole.FOUNDER) {
     return { error: "Only Head of HR or Founder can revoke assignments." };
   }
-  if (!process.env.DATABASE_URL) return { error: "Database not configured." };
 
   try {
-    await withDb(async (ds) => {
-      await ds.query(`DELETE FROM job_assignments WHERE id = $1`, [assignmentId]);
+    const db = readDb();
 
-      const auditRepo = ds.getRepository<IAuditLog>("AuditLog");
-      await auditRepo.save(
-        auditRepo.create({
-          userId: session.id,
-          action: "JOB_ASSIGNMENT_REVOKED",
-          targetTable: "job_assignments",
-          targetId: assignmentId,
-          notes: "Job assignment revoked by Head of HR.",
-          oldValues: null,
-          newValues: null,
-        })
-      );
+    db.jobAssignments = db.jobAssignments.filter((ja) => ja.id !== assignmentId);
+
+    const nextLogId = db.auditLogs.length > 0
+      ? Math.max(...db.auditLogs.map((l) => l.id || 0)) + 1
+      : 1;
+
+    db.auditLogs.push({
+      id: nextLogId,
+      userId: session.id,
+      action: "JOB_ASSIGNMENT_REVOKED",
+      targetTable: "job_assignments",
+      targetId: assignmentId,
+      notes: "Job assignment revoked by Head of HR.",
+      oldValues: null,
+      newValues: null,
+      timestamp: new Date(),
     });
+
+    writeDb(db);
 
     revalidatePath("/");
     return {};
