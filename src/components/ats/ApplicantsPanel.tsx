@@ -221,7 +221,7 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
   const [changeHMTarget, setChangeHMTarget] = useState<Applicant | null>(null);
 
   const canChangeHM =
-    user.role === UserRole.HEAD_OF_HR || user.role === UserRole.FOUNDER;
+    user.role === UserRole.ADMIN;
 
   // Fetch HM users once for the modal (only if allowed)
   useEffect(() => {

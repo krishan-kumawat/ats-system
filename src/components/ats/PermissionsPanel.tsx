@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { UserRole } from "@/lib/enums";
 import {
   Permission,
@@ -8,7 +8,7 @@ import {
   RolePermissions,
   ALL_PERMISSIONS,
   EDITABLE_ROLES,
-  FOUNDER_LOCKED_PERMISSIONS,
+  ADMIN_LOCKED_PERMISSIONS,
   PERMISSION_META,
   CATEGORY_META,
   ROLE_META,
@@ -17,29 +17,38 @@ import { AuditEntry } from "@/lib/atsStore";
 
 interface PermissionsPanelProps {
   permissions: RolePermissions;
+  activeRole: UserRole;
+  setActiveRole: (role: UserRole) => void;
   onPermissionsChange: (role: UserRole, set: PermissionSet, next: RolePermissions) => Promise<void>;
   onAuditLog: (entry: AuditEntry) => void;
   onToast: (title: string, msg: string, icon?: string) => void;
 }
 
-const CATEGORIES = ["pipeline", "jobs", "access", "admin"] as const;
+const CATEGORIES = ["pipeline", "jobs"] as const;
 
 export default function PermissionsPanel({
   permissions,
+  activeRole,
+  setActiveRole,
   onPermissionsChange,
   onAuditLog,
   onToast,
 }: PermissionsPanelProps) {
-  const [activeRole, setActiveRole] = useState<UserRole>(UserRole.RECRUITER);
   const [pendingChanges, setPendingChanges] = useState<Partial<PermissionSet>>({});
   const [saving, setSaving] = useState(false);
+
+  const [prevActiveRole, setPrevActiveRole] = useState<UserRole>(activeRole);
+  if (activeRole !== prevActiveRole) {
+    setPrevActiveRole(activeRole);
+    setPendingChanges({});
+  }
 
   const currentSet = permissions[activeRole];
   const merged: PermissionSet = { ...currentSet, ...pendingChanges };
   const hasPending = Object.keys(pendingChanges).length > 0;
 
   function toggle(perm: Permission) {
-    if (FOUNDER_LOCKED_PERMISSIONS.has(perm) && activeRole === UserRole.FOUNDER) return;
+    if (ADMIN_LOCKED_PERMISSIONS.has(perm) && activeRole === UserRole.ADMIN) return;
     const next = !merged[perm];
     setPendingChanges((prev) => {
       const updated = { ...prev, [perm]: next };
@@ -61,7 +70,7 @@ export default function PermissionsPanel({
 
     onAuditLog({
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      user: "Founder",
+      user: "Admin",
       action: "PERMISSION_CHANGE",
       target: ROLE_META[activeRole].label,
       notes: `Updated: ${changed}`,
@@ -80,7 +89,7 @@ export default function PermissionsPanel({
   function grantAll() {
     const updates: Partial<PermissionSet> = {};
     ALL_PERMISSIONS.forEach((p) => {
-      if (!FOUNDER_LOCKED_PERMISSIONS.has(p) || activeRole !== UserRole.FOUNDER) {
+      if (!ADMIN_LOCKED_PERMISSIONS.has(p) || activeRole !== UserRole.ADMIN) {
         if (!currentSet[p]) updates[p] = true;
       }
     });
@@ -96,7 +105,7 @@ export default function PermissionsPanel({
   function revokeAll() {
     const updates: Partial<PermissionSet> = {};
     ALL_PERMISSIONS.forEach((p) => {
-      if (!FOUNDER_LOCKED_PERMISSIONS.has(p)) {
+      if (!ADMIN_LOCKED_PERMISSIONS.has(p)) {
         if (currentSet[p]) updates[p] = false;
       }
     });
@@ -117,10 +126,10 @@ export default function PermissionsPanel({
         <div>
           <h2 className="text-base font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
             <i className="fa-solid fa-user-shield text-indigo-600 dark:text-indigo-400" />
-            Role Permission Manager
+            Profile Permission Manager
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Founder-only control. Toggle permissions per role, then save.
+            Founder-only control. Toggle permissions per profile, then save.
           </p>
         </div>
 
@@ -135,7 +144,7 @@ export default function PermissionsPanel({
             <button
               onClick={saveChanges}
               disabled={saving}
-              className="px-4 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2 disabled:opacity-60"
+              className="px-4 py-1.5 text-xs font-semibold bg-indigo-650 hover:bg-indigo-500 text-white rounded-lg shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2 disabled:opacity-60"
             >
               <i className="fa-solid fa-floppy-disk" />
               Save Changes ({Object.keys(pendingChanges).length})
@@ -146,10 +155,10 @@ export default function PermissionsPanel({
 
       <div className="flex gap-5 flex-1 overflow-hidden">
 
-        {/* ── Role selector column ── */}
+        {/* ── Profile selector column ── */}
         <div className="w-52 flex-shrink-0 flex flex-col gap-2">
           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-1 mb-1">
-            Select Role
+            Select Profile
           </p>
           {EDITABLE_ROLES.map((r) => {
             const meta = ROLE_META[r];
@@ -250,7 +259,7 @@ export default function PermissionsPanel({
                   {perms.map((perm) => {
                     const meta = PERMISSION_META[perm];
                     const isOn = merged[perm];
-                    const isLocked = activeRole === UserRole.FOUNDER && FOUNDER_LOCKED_PERMISSIONS.has(perm);
+                    const isLocked = activeRole === UserRole.ADMIN && ADMIN_LOCKED_PERMISSIONS.has(perm);
                     const isDirty = perm in pendingChanges;
 
                     return (

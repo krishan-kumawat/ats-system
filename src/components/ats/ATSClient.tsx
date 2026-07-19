@@ -28,11 +28,12 @@ import PermissionsPanel from "@/components/ats/PermissionsPanel";
 import ApplicantsPanel from "@/components/ats/ApplicantsPanel";
 import JobAssignmentPanel from "@/components/ats/JobAssignmentPanel";
 import UsersPanel from "@/components/ats/UsersPanel";
+import UserRecordPanel from "@/components/ats/UserRecordPanel";
 
 const TOTAL_BUDGET = 600000;
 
 function toRole(userRole: UserRole): Role {
-  return userRole === UserRole.FOUNDER ? "founder" : "recruiter";
+  return userRole === UserRole.ADMIN ? "founder" : "recruiter";
 }
 
 interface ATSClientProps {
@@ -53,10 +54,22 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
   const [activeCandidateId, setActiveCandidateId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [toast, setToast] = useState<ToastState>({ title: "", message: "", icon: "info", visible: false });
+  const [activePermissionRole, setActivePermissionRole] = useState<UserRole>(UserRole.RECRUITER);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const myPerms = rolePermissions[user.role];
-  const isFounder = user.role === UserRole.FOUNDER;
+  const myPerms = {
+    canAddJob:            rolePermissions[user.role]?.recruitmentJobWrite ?? false,
+    canIngestCandidate:   rolePermissions[user.role]?.recruitmentCandidateWrite ?? false,
+    canDragPipeline:      rolePermissions[user.role]?.recruitmentCandidateWrite ?? false,
+    canViewAuditLog:      user.role === UserRole.ADMIN,
+    canApproveOffer:      user.role === UserRole.ADMIN,
+    canViewAnalytics:     (rolePermissions[user.role]?.recruitmentJobRead || rolePermissions[user.role]?.recruitmentCandidateRead) ?? false,
+    canEditScorecard:     rolePermissions[user.role]?.recruitmentCandidateWrite ?? false,
+    canManagePermissions: user.role === UserRole.ADMIN,
+    canAssignJobs:        rolePermissions[user.role]?.recruitmentJobWrite ?? false,
+  };
+  const isFounder = user.role === UserRole.ADMIN;
 
   useEffect(() => {
     const html = document.documentElement;
@@ -65,7 +78,7 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
 
   const showToast = useCallback((title: string, msg: string, icon = "info") => {
     if (msg === "__OPEN_ADD_MODAL__") {
-      if (!rolePermissions[user.role].canIngestCandidate) return;
+      if (!myPerms.canIngestCandidate) return;
       setShowAddModal(true);
       return;
     }
@@ -74,7 +87,13 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
     toastTimer.current = setTimeout(() => {
       setToast((prev) => ({ ...prev, visible: false }));
     }, 4000);
-  }, [rolePermissions, user.role]);
+  }, [myPerms.canIngestCandidate]);
+
+  const handleNavigateToRolePermissions = useCallback((role: UserRole) => {
+    setActivePermissionRole(role);
+    setTab("permissions");
+    setSelectedUserId(null);
+  }, []);
 
   function handleRoleChange(newRole: Role) {
     setRole(newRole);
@@ -195,7 +214,10 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
           candidateCount={candidates.length}
           jobCount={jobs.length}
           permissions={myPerms}
-          onTabChange={setTab}
+          onTabChange={(t) => {
+            setTab(t);
+            setSelectedUserId(null);
+          }}
           onToast={showToast}
         />
 
@@ -250,14 +272,17 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
             )}
 
             {tab === "assignments" && (
-              (isFounder || user.role === UserRole.HEAD_OF_HR)
+              isFounder
                 ? <JobAssignmentPanel jobs={jobs} onToast={showToast} />
                 : <PermissionDenied label="Job Assignment Manager" />
             )}
 
             {tab === "users" && (
               isFounder
-                ? <UsersPanel onToast={showToast} />
+                ? (selectedUserId
+                    ? <UserRecordPanel userId={selectedUserId} onBack={() => setSelectedUserId(null)} onToast={showToast} />
+                    : <UsersPanel onToast={showToast} onNavigateToRolePermissions={handleNavigateToRolePermissions} onSelectUserId={setSelectedUserId} />
+                  )
                 : <PermissionDenied label="User Management" />
             )}
 
@@ -266,6 +291,8 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
                 ? (
                   <PermissionsPanel
                     permissions={rolePermissions}
+                    activeRole={activePermissionRole}
+                    setActiveRole={setActivePermissionRole}
                     onPermissionsChange={handleSavePermissions}
                     onAuditLog={(entry) => persistAudit(entry, "role_permissions", entry.target)}
                     onToast={showToast}

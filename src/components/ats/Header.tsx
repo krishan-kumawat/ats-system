@@ -18,25 +18,21 @@ interface HeaderProps {
 }
 
 const ROLE_BADGE: Record<UserRole, { label: string; cls: string }> = {
-  [UserRole.FOUNDER]: {
-    label: "Founder",
+  [UserRole.ADMIN]: {
+    label: "Admin",
     cls: "bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400",
   },
   [UserRole.RECRUITER]: {
     label: "Recruiter",
     cls: "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400",
   },
-  [UserRole.ADMIN]: {
-    label: "Admin",
-    cls: "bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400",
-  },
   [UserRole.HIRING_MANAGER]: {
     label: "Hiring Mgr",
     cls: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400",
   },
-  [UserRole.HEAD_OF_HR]: {
-    label: "Head of HR",
-    cls: "bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400",
+  [UserRole.READ_ONLY]: {
+    label: "Read Only",
+    cls: "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400",
   },
 };
 
@@ -52,8 +48,11 @@ export default function Header({
 }: HeaderProps) {
   const isOver = allocated > totalBudget;
   const [isPending, startTransition] = useTransition();
-  const badge = ROLE_BADGE[user.role];
-  const isFounder = user.role === UserRole.FOUNDER;
+  const badge = ROLE_BADGE[user.role] || {
+    label: String(user.role),
+    cls: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400",
+  };
+  const isAdmin = user.role === UserRole.ADMIN;
 
   function handleLogout() {
     startTransition(async () => {
@@ -122,27 +121,27 @@ export default function Header({
             <span>HR Recruiter</span>
           </button>
 
-          {/* Founder Executive tab — enabled only for actual Founders */}
+          {/* Admin Executive tab — enabled only for Admins */}
           <button
             onClick={() => {
-              if (!isFounder) {
-                onToast("Access Restricted", "Founder Executive view is only available to Founders.", "chess-king");
+              if (!isAdmin) {
+                onToast("Access Restricted", "Admin Executive view is only available to Administrators.", "chess-king");
                 return;
               }
               onRoleChange("founder");
             }}
-            title={!isFounder ? "Only Founder accounts can switch to this view" : undefined}
+            title={!isAdmin ? "Only Admin accounts can switch to this view" : undefined}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all ${
-              role === "founder" && isFounder
+              role === "founder" && isAdmin
                 ? "bg-indigo-600 text-white shadow-sm"
-                : isFounder
+                : isAdmin
                 ? "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
                 : "text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-60"
             }`}
           >
-            <i className={`fa-solid fa-chess-king ${!isFounder ? "text-slate-400 dark:text-slate-600" : ""}`} />
-            <span>Founder Executive</span>
-            {!isFounder && (
+            <i className={`fa-solid fa-chess-king ${!isAdmin ? "text-slate-400 dark:text-slate-600" : ""}`} />
+            <span>Admin Executive</span>
+            {!isAdmin && (
               <i className="fa-solid fa-lock text-[9px] text-slate-400 dark:text-slate-600" />
             )}
           </button>

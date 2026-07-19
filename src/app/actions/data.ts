@@ -1,13 +1,14 @@
 "use server";
 
-import { readDb } from "@/db/local-db";
 import { UserRole, ApplicationStage, ApprovalStatus, Recommendation } from "@/lib/enums";
 import { Candidate, Job, AuditEntry, JobStatus, PipelineStage } from "@/lib/atsStore";
+import { getSession } from "@/lib/auth";
 import {
   RolePermissions,
   DEFAULT_ROLE_PERMISSIONS,
   ALL_PERMISSIONS,
   PermissionSet,
+  BACKEND_PERM_MAP,
 } from "@/lib/permissions";
 
 export interface InitialData {
@@ -16,141 +17,6 @@ export interface InitialData {
   auditLogs: AuditEntry[];
   rolePermissions: RolePermissions;
 }
-
-// ─── DB → UI shape converters ─────────────────────────────────────────────────
-
-function dbStageToPipeline(stage: ApplicationStage): PipelineStage {
-  switch (stage) {
-    case ApplicationStage.APPLIED:       return "Applied";
-    case ApplicationStage.SCREENING:     return "Screening";
-    case ApplicationStage.INTERVIEWING:  return "Interviewing";
-    case ApplicationStage.OFFER_PREP:
-    case ApplicationStage.OFFER_APPROVED:
-    case ApplicationStage.HIRED:         return "Offer";
-    default:                             return "Applied";
-  }
-}
-
-function dbApprovalToUI(status: ApprovalStatus | null): "NONE" | "PENDING" | "APPROVED" | "REJECTED" {
-  if (!status) return "NONE";
-  if (status === ApprovalStatus.PENDING)  return "PENDING";
-  if (status === ApprovalStatus.APPROVED) return "APPROVED";
-  if (status === ApprovalStatus.REJECTED) return "REJECTED";
-  return "NONE";
-}
-
-function dbRecommendationToUI(r: Recommendation | null): Candidate["scorecard"]["recommendation"] {
-  if (!r) return "";
-  return r as Candidate["scorecard"]["recommendation"];
-}
-
-// ─── Main fetch ───────────────────────────────────────────────────────────────
-
-export async function fetchInitialData(): Promise<InitialData> {
-  try {
-    const db = readDb();
-
-    // ── Map jobs ──────────────────────────────────────────────────────────────
-    const jobs: Job[] = db.jobs.map((j) => ({
-      id: j.id,
-      title: j.title,
-      department: j.department,
-      hiringManager: j.hiringManagerName,
-      status: j.status as unknown as JobStatus,
-      budgetLimit: Number(j.budgetLimit),
-      createdAt: j.createdAt instanceof Date
-        ? j.createdAt.toISOString().slice(0, 10)
-        : String(j.createdAt).slice(0, 10),
-    }));
-
-    // ── Map candidates from applications ──────────────────────────────────────
-    const scorecardsByAppId = new Map(db.scorecards.map((s) => [s.applicationId, s]));
-    const approvalsByAppId  = new Map(db.founderApprovals.map((fa) => [fa.applicationId, fa]));
-
-    const candidates: Candidate[] = db.applications.map((app) => {
-      const cand = db.candidates.find((c) => c.id === app.candidateId)!;
-      const sc = scorecardsByAppId.get(app.id);
-      const fa = approvalsByAppId.get(app.id);
-
-      return {
-        id: app.id,
-        name: cand.name,
-        email: cand.email,
-        phone: cand.phone ?? "",
-        role: jobs.find((j) => j.id === app.jobId)?.title ?? "",
-        department: jobs.find((j) => j.id === app.jobId)?.department ?? "",
-        stage: dbStageToPipeline(app.stage),
-        sourceTag: app.sourceTag,
-        skills: cand.skills,
-        expectedSalary: Number(app.expectedSalary) || 0,
-        proposedSalary: fa ? Number(fa.proposedSalary) : 0,
-        proposedEquity: fa ? Number(fa.proposedEquity) : 0,
-        jobId: app.jobId,
-        scorecard: {
-          technicalScore: sc?.technicalScore ?? 0,
-          systemScore: sc?.systemScore ?? 0,
-          cultureScore: sc?.cultureScore ?? 0,
-          pros: sc?.pros ?? "",
-          cons: sc?.cons ?? "",
-          recommendation: dbRecommendationToUI(sc?.recommendation ?? null),
-        },
-        founderApproval: {
-          status: dbApprovalToUI(fa?.status ?? null),
-          feedback: fa?.feedback ?? "",
-        },
-      };
-    });
-
-    // ── Map audit logs ────────────────────────────────────────────────────────
-    const auditLogs: AuditEntry[] = db.auditLogs.map((l) => ({
-      timestamp: l.timestamp instanceof Date
-        ? l.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-        : String(l.timestamp),
-      user: l.userId,
-      action: l.action,
-      target: l.targetId,
-      notes: l.notes ?? "",
-    }));
-
-    let rolePermissions: RolePermissions = { ...DEFAULT_ROLE_PERMISSIONS };
-
-    if (db.rolePermissions.length > 0) {
-      const built: RolePermissions = {} as RolePermissions;
-
-      for (const role of [
-        UserRole.FOUNDER,
-        UserRole.RECRUITER,
-        UserRole.ADMIN,
-        UserRole.HIRING_MANAGER,
-        UserRole.HEAD_OF_HR,
-      ]) {
-        const rolePerms = db.rolePermissions.filter((p) => p.role === role);
-        const set: Record<string, boolean> = {};
-        for (const rp of rolePerms) {
-          set[rp.permissionKey] = rp.granted;
-        }
-        // Fill missing keys from defaults (schema evolution safety)
-        for (const key of ALL_PERMISSIONS) {
-          if (!(key in set)) set[key] = DEFAULT_ROLE_PERMISSIONS[role][key];
-        }
-        built[role] = set as PermissionSet;
-      }
-      rolePermissions = built;
-    }
-
-    return { candidates, jobs, auditLogs, rolePermissions };
-  } catch (err) {
-    console.error("[fetchInitialData] local DB error, falling back to static:", err);
-    return {
-      candidates: [],
-      jobs: [],
-      auditLogs: [],
-      rolePermissions: DEFAULT_ROLE_PERMISSIONS,
-    };
-  }
-}
-
-// ─── Applicants list (with optional job filter) ───────────────────────────────
 
 export interface Applicant {
   applicationId: string;
@@ -172,47 +38,211 @@ export interface Applicant {
   recommendation: string;
 }
 
-export async function fetchApplicantsAction(jobId?: string): Promise<Applicant[]> {
+// ─── DB → UI shape converters ─────────────────────────────────────────────────
+
+function dbStageToPipeline(stage: string): PipelineStage {
+  const s = (stage || "").toLowerCase();
+  if (s.includes("applied")) return "Applied";
+  if (s.includes("screening")) return "Screening";
+  if (s.includes("interviewing")) return "Interviewing";
+  if (s.includes("offered") || s.includes("offer")) return "Offer";
+  return "Applied";
+}
+
+function dbApprovalToUI(status: string | null): "NONE" | "PENDING" | "APPROVED" | "REJECTED" {
+  if (!status) return "NONE";
+  const s = status.toUpperCase();
+  if (s === "PENDING") return "PENDING";
+  if (s === "APPROVED") return "APPROVED";
+  if (s === "REJECTED") return "REJECTED";
+  return "NONE";
+}
+
+function dbRecommendationToUI(r: string | null): Candidate["scorecard"]["recommendation"] {
+  if (!r) return "";
+  return r as Candidate["scorecard"]["recommendation"];
+}
+
+// ─── Main fetch ───────────────────────────────────────────────────────────────
+
+export async function fetchInitialData(): Promise<InitialData> {
+  const session = await getSession();
+  if (!session || !session.accessToken) {
+    return {
+      candidates: [],
+      jobs: [],
+      auditLogs: [],
+      rolePermissions: DEFAULT_ROLE_PERMISSIONS,
+    };
+  }
+
   try {
-    const db = readDb();
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+    };
 
-    // Filter and sort applications by createdAt DESC
-    const filteredApps = db.applications
-      .filter((app) => !jobId || app.jobId === jobId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    // 1. Fetch Jobs from PostgreSQL Backend
+    const jobsRes = await fetch("http://localhost:3000/api/v1/jobs", { headers });
+    const backendJobs = jobsRes.ok ? await jobsRes.json() : [];
 
-    return filteredApps.map((app) => {
-      const candidate = db.candidates.find((c) => c.id === app.candidateId)!;
-      const job = db.jobs.find((j) => j.id === app.jobId);
-      const assignedHM = app.assignedHiringManagerId
-        ? db.users.find((u) => u.id === app.assignedHiringManagerId)
-        : null;
-      const scorecard = db.scorecards.find((s) => s.applicationId === app.id);
+    const jobs: Job[] = backendJobs.map((j: any) => ({
+      id: j.id,
+      title: j.title,
+      department: j.department?.name || "Unassigned",
+      hiringManager: j.owner ? `${j.owner.firstName} ${j.owner.lastName}` : "System Owner",
+      status: (j.status || "OPEN").toUpperCase() as unknown as JobStatus,
+      budgetLimit: Number(j.budgetLimit || 0),
+      createdAt: j.createdAt ? String(j.createdAt).slice(0, 10) : "",
+    }));
 
-      const hiringManagerName = assignedHM?.name || job?.hiringManagerName || "";
+    // 2. Fetch Candidates from PostgreSQL Backend
+    const candRes = await fetch("http://localhost:3000/api/v1/candidates", { headers });
+    const backendCandidates = candRes.ok ? await candRes.json() : [];
 
-      return {
-        applicationId: app.id,
-        candidateId: app.candidateId,
-        assignedHiringManagerId: app.assignedHiringManagerId,
-        assignedHiringManagerName: assignedHM?.name ?? "",
-        name: candidate.name,
-        email: candidate.email,
-        phone: candidate.phone ?? "",
-        skills: Array.isArray(candidate.skills) ? candidate.skills : [],
-        stage: dbStageToPipeline(app.stage),
-        sourceTag: app.sourceTag,
-        expectedSalary: Number(app.expectedSalary) || 0,
-        jobId: app.jobId,
-        jobTitle: job?.title ?? "",
-        department: job?.department ?? "",
-        hiringManager: hiringManagerName,
-        appliedAt: app.createdAt instanceof Date
-          ? app.createdAt.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-          : String(app.createdAt),
-        recommendation: scorecard?.recommendation ?? "",
-      };
-    });
+    const candidates: Candidate[] = [];
+    for (const c of backendCandidates) {
+      for (const cj of c.candidateJobs || []) {
+        candidates.push({
+          id: `${c.id}::${cj.jobId}`, // Flatten relation to Candidate UI applications
+          name: `${c.firstName} ${c.lastName}`.trim(),
+          email: c.email,
+          phone: c.phone ?? "",
+          role: cj.job?.title ?? "",
+          department: cj.job?.department?.name ?? "",
+          stage: dbStageToPipeline(cj.status),
+          sourceTag: cj.sourceTag ?? "Manual PDF Upload",
+          skills: c.skills || [],
+          expectedSalary: Number(cj.expectedSalary) || 0,
+          proposedSalary: Number(cj.proposedSalary) || 0,
+          proposedEquity: Number(cj.proposedEquity) || 0,
+          jobId: cj.jobId,
+          scorecard: {
+            technicalScore: cj.technicalScore ?? 0,
+            systemScore: cj.systemScore ?? 0,
+            cultureScore: cj.cultureScore ?? 0,
+            pros: cj.pros ?? "",
+            cons: cj.cons ?? "",
+            recommendation: dbRecommendationToUI(cj.recommendation),
+          },
+          founderApproval: {
+            status: dbApprovalToUI(cj.approvalStatus),
+            feedback: cj.approvalFeedback ?? "",
+          },
+        });
+      }
+    }
+
+    // 3. Fetch Audit Logs from PostgreSQL Backend
+    const auditRes = await fetch("http://localhost:3000/api/v1/audit-logs", { headers });
+    const backendAuditLogs = auditRes.ok ? await auditRes.json() : [];
+
+    const auditLogs: AuditEntry[] = backendAuditLogs.map((l: any) => ({
+      timestamp: l.createdAt
+        ? new Date(l.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : "",
+      user: l.user ? `${l.user.firstName} ${l.user.lastName}` : "System",
+      action: l.action,
+      target: l.resourceId ?? "",
+      notes: l.payload?.notes || l.action,
+    }));
+
+    // 4. Fetch Role Permissions from PostgreSQL Backend
+    const profilesRes = await fetch("http://localhost:3000/api/v1/profiles", { headers });
+    const backendProfiles = profilesRes.ok ? await profilesRes.json() : [];
+
+    const BACKEND_PERM_MAP_REVERSE: Record<string, keyof PermissionSet> = {};
+    for (const [key, codes] of Object.entries(BACKEND_PERM_MAP)) {
+      for (const c of codes) {
+        BACKEND_PERM_MAP_REVERSE[c] = key as keyof PermissionSet;
+      }
+    }
+
+    const rolePermissions: RolePermissions = { ...DEFAULT_ROLE_PERMISSIONS };
+    for (const p of backendProfiles) {
+      let roleKey: UserRole | null = null;
+      const nameNorm = p.name.toLowerCase().replace(/[\s_-]+/g, "");
+      if (nameNorm === "admin") roleKey = UserRole.ADMIN;
+      else if (nameNorm === "recruiter") roleKey = UserRole.RECRUITER;
+      else if (nameNorm === "hiringmanager") roleKey = UserRole.HIRING_MANAGER;
+      else if (nameNorm === "readonly") roleKey = UserRole.READ_ONLY;
+
+      if (roleKey) {
+        const set: PermissionSet = { ...DEFAULT_ROLE_PERMISSIONS[roleKey] };
+        // Reset all UI managed permissions to false first (since we will read them from DB)
+        for (const key of ALL_PERMISSIONS) {
+          set[key] = false;
+        }
+
+        // Enable permissions that are present in profilePermissions
+        for (const pp of p.profilePermissions || []) {
+          const code = pp.permission?.code;
+          const uiKey = BACKEND_PERM_MAP_REVERSE[code];
+          if (uiKey) {
+            set[uiKey] = true;
+          }
+        }
+        rolePermissions[roleKey] = set;
+      }
+    }
+
+    return { candidates, jobs, auditLogs, rolePermissions };
+  } catch (err) {
+    console.error("[fetchInitialData] PostgreSQL Backend error:", err);
+    return {
+      candidates: [],
+      jobs: [],
+      auditLogs: [],
+      rolePermissions: DEFAULT_ROLE_PERMISSIONS,
+    };
+  }
+}
+
+// ─── Applicants list (with optional job filter) ───────────────────────────────
+
+export async function fetchApplicantsAction(jobId?: string): Promise<any[]> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return [];
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+    };
+
+    const candRes = await fetch("http://localhost:3000/api/v1/candidates", { headers });
+    if (!candRes.ok) return [];
+    const backendCandidates = await candRes.json();
+
+    const applicants: any[] = [];
+    for (const c of backendCandidates) {
+      for (const cj of c.candidateJobs || []) {
+        if (jobId && cj.jobId !== jobId) continue;
+
+        applicants.push({
+          applicationId: `${c.id}::${cj.jobId}`,
+          candidateId: c.id,
+          assignedHiringManagerId: cj.job?.ownerId || null,
+          assignedHiringManagerName: cj.job?.owner ? `${cj.job.owner.firstName} ${cj.job.owner.lastName}` : "",
+          name: `${c.firstName} ${c.lastName}`.trim(),
+          email: c.email,
+          phone: c.phone ?? "",
+          skills: c.skills || [],
+          stage: dbStageToPipeline(cj.status),
+          sourceTag: cj.sourceTag ?? "Manual PDF Upload",
+          expectedSalary: Number(cj.expectedSalary) || 0,
+          jobId: cj.jobId,
+          jobTitle: cj.job?.title || "",
+          department: cj.job?.department?.name || "",
+          hiringManager: cj.job?.owner ? `${cj.job.owner.firstName} ${cj.job.owner.lastName}` : "",
+          appliedAt: cj.createdAt ? new Date(cj.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "",
+          recommendation: cj.recommendation ?? "",
+        });
+      }
+    }
+
+    // Sort applicants by appliedAt DESC
+    applicants.sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
+
+    return applicants;
   } catch (err) {
     console.error("[fetchApplicantsAction]", err);
     return [];

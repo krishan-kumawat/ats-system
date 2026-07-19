@@ -1,15 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { v4 as uuidv4 } from "uuid";
-import { readDb, writeDb } from "@/db/local-db";
 import { getSession } from "@/lib/auth";
 import { Job, JobStatus } from "@/lib/atsStore";
-import { JobStatus as DBJobStatus } from "@/lib/enums";
-
-function mapStatus(s: JobStatus): DBJobStatus {
-  return s as unknown as DBJobStatus;
-}
 
 export interface CreateJobInput {
   title: string;
@@ -22,74 +15,84 @@ export interface CreateJobInput {
 
 export async function createJobAction(input: CreateJobInput): Promise<{ job: Job; error?: string }> {
   const session = await getSession();
-  if (!session) return { job: {} as Job, error: "Unauthorized" };
+  if (!session || !session.accessToken) return { job: {} as Job, error: "Unauthorized" };
 
   try {
-    const db = readDb();
-    const id = `job-${input.department.toLowerCase().slice(0, 3)}-${uuidv4().replace(/-/g, "").slice(0, 5)}`;
-
-    // Use the explicit picker ID; fall back to name lookup for legacy paths
-    let hmId = input.hiringManagerId ?? null;
-    if (!hmId) {
-      const hmUser = db.users.find((u) => u.name === input.hiringManager);
-      hmId = hmUser?.id ?? session.id;
-    }
-
-    const newJob = {
-      id,
-      title: input.title,
-      department: input.department,
-      hiringManagerId: hmId,
-      hiringManagerName: input.hiringManager,
-      status: mapStatus(input.status),
-      gDriveFolderId: null,
-      budgetLimit: input.budgetLimit,
-      createdAt: new Date(),
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
     };
 
-    db.jobs.push(newJob);
+    // 1. Resolve or Create Department on Backend
+    const deptRes = await fetch("http://localhost:3000/api/v1/departments", {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    const departments = deptRes.ok ? await deptRes.json() : [];
+    let dept = departments.find(
+      (d: any) => d.name.toLowerCase() === input.department.toLowerCase()
+    );
 
-    // Assign all existing applicants of this job to the selected HM
-    db.applications.forEach((app) => {
-      if (app.jobId === id) {
-        app.assignedHiringManagerId = hmId;
+    if (!dept && input.department.trim()) {
+      const code = input.department.trim().toUpperCase().replace(/[\s_-]+/g, "_");
+      const createDeptRes = await fetch("http://localhost:3000/api/v1/departments", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ name: input.department.trim(), code }),
+      });
+      if (createDeptRes.ok) {
+        dept = await createDeptRes.json();
       }
+    }
+
+    // 2. Create Job on PostgreSQL Backend
+    const createJobRes = await fetch("http://localhost:3000/api/v1/jobs", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        title: input.title,
+        description: `Job posting for ${input.title} in ${input.department}.`,
+        departmentId: dept?.id || undefined,
+      }),
     });
 
-    // Write audit log entry
-    const nextLogId = db.auditLogs.length > 0
-      ? Math.max(...db.auditLogs.map((l) => l.id || 0)) + 1
-      : 1;
+    if (!createJobRes.ok) {
+      const errData = await createJobRes.json().catch(() => ({}));
+      return {
+        job: {} as Job,
+        error: errData.message || "Failed to create job requisition on backend.",
+      };
+    }
 
-    db.auditLogs.push({
-      id: nextLogId,
-      userId: session.id,
-      action: "CREATED_JOB",
-      targetTable: "jobs",
-      targetId: id,
-      notes: `Job requisition created. Department: ${input.department}. Budget: $${input.budgetLimit.toLocaleString("en-US")}.`,
-      oldValues: null,
-      newValues: { jobId: id, title: input.title, status: input.status },
-      timestamp: new Date(),
-    });
+    let createdJob = await createJobRes.json();
 
-    writeDb(db);
+    // 3. Update status if it differs from the default ('Draft')
+    const targetStatus = input.status === "OPEN" ? "Open" : input.status === "CLOSED" ? "Closed" : "Draft";
+    if (createdJob.status !== targetStatus) {
+      const updateJobRes = await fetch(`http://localhost:3000/api/v1/jobs/${createdJob.id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ status: targetStatus }),
+      });
+      if (updateJobRes.ok) {
+        createdJob = await updateJobRes.json();
+      }
+    }
 
     revalidatePath("/");
 
     return {
       job: {
-        id: newJob.id,
-        title: newJob.title,
-        department: newJob.department,
-        hiringManager: newJob.hiringManagerName,
-        status: newJob.status as unknown as JobStatus,
-        budgetLimit: Number(newJob.budgetLimit),
-        createdAt: new Date().toISOString().slice(0, 10),
+        id: createdJob.id,
+        title: createdJob.title,
+        department: dept?.name || input.department,
+        hiringManager: session.name || "System Admin",
+        status: createdJob.status.toUpperCase() as unknown as JobStatus,
+        budgetLimit: input.budgetLimit,
+        createdAt: createdJob.createdAt ? String(createdJob.createdAt).slice(0, 10) : "",
       },
     };
   } catch (err) {
     console.error("[createJobAction]", err);
-    return { job: {} as Job, error: "Failed to create job. Please try again." };
+    return { job: {} as Job, error: "Failed to create job requisition. Please try again." };
   }
 }

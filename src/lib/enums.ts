@@ -1,9 +1,8 @@
 export enum UserRole {
-  FOUNDER = "FOUNDER",
-  RECRUITER = "RECRUITER",
-  HIRING_MANAGER = "HIRING_MANAGER",
-  ADMIN = "ADMIN",
-  HEAD_OF_HR = "HEAD_OF_HR",
+  ADMIN = "Admin",
+  RECRUITER = "Recruiter",
+  HIRING_MANAGER = "Hiring Manager",
+  READ_ONLY = "Read Only",
 }
 
 export enum JobStatus {

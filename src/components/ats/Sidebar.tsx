@@ -2,15 +2,24 @@
 
 import { Role, Tab } from "@/lib/atsStore";
 import { UserRole } from "@/lib/enums";
-import { PermissionSet, ROLE_META } from "@/lib/permissions";
-
+import { ROLE_META } from "@/lib/permissions";
 interface SidebarProps {
   role: Role;
   userRole: UserRole;
   tab: Tab;
   candidateCount: number;
   jobCount: number;
-  permissions: PermissionSet;
+  permissions: {
+    canAddJob: boolean;
+    canIngestCandidate: boolean;
+    canDragPipeline: boolean;
+    canViewAuditLog: boolean;
+    canApproveOffer: boolean;
+    canViewAnalytics: boolean;
+    canEditScorecard: boolean;
+    canManagePermissions: boolean;
+    canAssignJobs: boolean;
+  };
   onTabChange: (tab: Tab) => void;
   onToast: (title: string, msg: string, icon?: string) => void;
 }
@@ -24,8 +33,13 @@ export default function Sidebar({
   permissions,
   onTabChange,
 }: SidebarProps) {
-  const isFounder = userRole === UserRole.FOUNDER;
-  const roleMeta = ROLE_META[userRole];
+  const isAdmin = userRole === UserRole.ADMIN;
+  const roleMeta = ROLE_META[userRole] || {
+    label: String(userRole),
+    color: "text-slate-600 dark:text-slate-400",
+    bg: "bg-slate-100 dark:bg-slate-800",
+    icon: "fa-user",
+  };
 
   const active =
     "w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all bg-slate-200 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400";
@@ -110,8 +124,8 @@ export default function Sidebar({
               </button>
             )}
 
-            {/* Job Assignment — Head of HR + Founder only */}
-            {(userRole === UserRole.HEAD_OF_HR || isFounder) && (
+            {/* Job Assignment — Admin only */}
+            {isAdmin && (
               <button onClick={() => onTabChange("assignments")} className={tab === "assignments" ? active : inactive}>
                 <span className="flex items-center gap-3">
                   <i className="fa-solid fa-user-tag" />
@@ -123,28 +137,28 @@ export default function Sidebar({
               </button>
             )}
 
-            {/* Permission Manager — founder only */}
-            {isFounder && (
+            {/* Permission Manager — admin only */}
+            {isAdmin && (
               <button onClick={() => onTabChange("permissions")} className={tab === "permissions" ? active : inactive}>
                 <span className="flex items-center gap-3">
                   <i className="fa-solid fa-user-shield" />
                   <span>Permission Manager</span>
                 </span>
                 <span className="text-[9px] font-bold text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-900 px-1.5 py-0.5 rounded-md">
-                  FOUNDER
+                  ADMIN
                 </span>
               </button>
             )}
 
-            {/* User Management — founder only */}
-            {isFounder && (
+            {/* User Management — admin only */}
+            {isAdmin && (
               <button onClick={() => onTabChange("users")} className={tab === "users" ? active : inactive}>
                 <span className="flex items-center gap-3">
                   <i className="fa-solid fa-users-gear" />
                   <span>User Management</span>
                 </span>
                 <span className="text-[9px] font-bold text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-900 px-1.5 py-0.5 rounded-md">
-                  FOUNDER
+                  ADMIN
                 </span>
               </button>
             )}
@@ -166,7 +180,7 @@ export default function Sidebar({
               { key: "canViewAuditLog",    label: "Audit Log" },
               { key: "canApproveOffer",    label: "Approve Offers" },
             ].map(({ key, label }) => {
-              const granted = permissions[key as keyof PermissionSet];
+              const granted = permissions[key as keyof typeof permissions];
               return (
                 <li key={key} className="flex items-center gap-2">
                   <i className={`fa-solid ${granted ? "fa-check text-emerald-500" : "fa-lock text-slate-300 dark:text-slate-700"} text-[10px]`} />

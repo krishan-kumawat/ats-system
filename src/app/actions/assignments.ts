@@ -1,10 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { v4 as uuidv4 } from "uuid";
-import { readDb, writeDb } from "@/db/local-db";
 import { UserRole } from "@/lib/enums";
 import { getSession } from "@/lib/auth";
+import { createUserAction } from "./users";
 
 export interface AssignmentRow {
   id: string;
@@ -22,9 +21,7 @@ export interface AssignmentRow {
 
 export interface AssignJobInput {
   jobId: string;
-  /** existing user id OR leave empty to create a new user */
   assignedToId?: string;
-  /** required when creating a new user */
   newUser?: {
     name: string;
     email: string;
@@ -34,44 +31,6 @@ export interface AssignJobInput {
   note?: string;
 }
 
-// ─── Fetch all assignments ────────────────────────────────────────────────────
-
-export async function fetchAssignmentsAction(): Promise<AssignmentRow[]> {
-  try {
-    const db = readDb();
-
-    const rows = db.jobAssignments.map((ja) => {
-      const job = db.jobs.find((j) => j.id === ja.jobId);
-      const assignedTo = db.users.find((u) => u.id === ja.assignedToId);
-      const assignedBy = db.users.find((u) => u.id === ja.assignedById);
-
-      return {
-        id: ja.id,
-        jobId: ja.jobId,
-        jobTitle: job?.title ?? "",
-        department: job?.department ?? "",
-        assignedToId: ja.assignedToId,
-        assignedToName: assignedTo?.name ?? "",
-        assignedToEmail: assignedTo?.email ?? "",
-        assignedToRole: assignedTo?.role ?? "",
-        assignedByName: assignedBy?.name ?? "",
-        note: ja.note ?? "",
-        assignedAt: ja.assignedAt instanceof Date
-          ? ja.assignedAt.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-          : String(ja.assignedAt),
-      };
-    });
-
-    // Sort by assignedAt DESC
-    return rows.sort((a, b) => new Date(b.assignedAt).getTime() - new Date(a.assignedAt).getTime());
-  } catch (err) {
-    console.error("[fetchAssignmentsAction]", err);
-    return [];
-  }
-}
-
-// ─── Fetch all users eligible to be assigned (everyone except Founder) ───────
-
 export interface UserOption {
   id: string;
   name: string;
@@ -79,77 +38,158 @@ export interface UserOption {
   role: UserRole;
 }
 
-export async function fetchAssignableUsersAction(): Promise<UserOption[]> {
-  try {
-    const db = readDb();
+// Map profile name to UserRole enum
+function mapProfileToRole(profileName: string): UserRole {
+  const norm = (profileName || "").toLowerCase().replace(/[\s_-]+/g, "");
+  if (norm.includes("admin")) return UserRole.ADMIN;
+  if (norm.includes("recruiter")) return UserRole.RECRUITER;
+  if (norm.includes("hiring") || norm.includes("manager")) return UserRole.HIRING_MANAGER;
+  return UserRole.READ_ONLY;
+}
 
-    return db.users
-      .filter((u) => u.role !== UserRole.FOUNDER)
-      .map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+// ─── Fetch all assignments ────────────────────────────────────────────────────
+
+export async function fetchAssignmentsAction(): Promise<AssignmentRow[]> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return [];
+
+  try {
+    const response = await fetch("http://localhost:3000/api/v1/sharing", {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+    });
+
+    if (!response.ok) return [];
+
+    const shares = await response.json();
+
+    const rows: AssignmentRow[] = shares.map((s: any) => ({
+      id: s.id,
+      jobId: s.resourceId,
+      jobTitle: s.job?.title || "Unknown Job",
+      department: s.job?.department || "Unassigned",
+      assignedToId: s.sharedToId,
+      assignedToName: s.sharedTo ? `${s.sharedTo.firstName} ${s.sharedTo.lastName}`.trim() : "",
+      assignedToEmail: s.sharedTo?.email || "",
+      assignedToRole: s.sharedTo?.profile?.name || "",
+      assignedByName: s.sharedBy ? `${s.sharedBy.firstName} ${s.sharedBy.lastName}`.trim() : "System",
+      note: `Access level: ${s.accessLevel}`,
+      assignedAt: s.createdAt
+        ? new Date(s.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+        : "",
+    }));
+
+    return rows.sort((a, b) => new Date(b.assignedAt).getTime() - new Date(a.assignedAt).getTime());
+  } catch (err) {
+    console.error("[fetchAssignmentsAction]", err);
+    return [];
+  }
+}
+
+// ─── Fetch all users eligible to be assigned (everyone except Founder/Admin) ──
+
+export async function fetchAssignableUsersAction(): Promise<UserOption[]> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return [];
+
+  try {
+    const response = await fetch("http://localhost:3000/api/v1/users?limit=200", {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+    });
+
+    if (!response.ok) return [];
+
+    const result = await response.json();
+    const users = result.data || [];
+
+    return users
+      .filter((u: any) => (u.profile?.name || "").toLowerCase() !== "admin")
+      .map((u: any) => ({
+        id: u.id,
+        name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
+        email: u.email,
+        role: mapProfileToRole(u.profile?.name),
+      }))
+      .sort((a: UserOption, b: UserOption) => a.name.localeCompare(b.name));
   } catch (err) {
     console.error("[fetchAssignableUsersAction]", err);
     return [];
   }
 }
 
-// ─── Fetch users who can act as Hiring Manager (HIRING_MANAGER + HEAD_OF_HR) ──
+// ─── Fetch users who can act as Hiring Manager (HIRING_MANAGER) ───────────────
 
 export async function fetchHiringManagerUsersAction(): Promise<UserOption[]> {
-  try {
-    const db = readDb();
+  const session = await getSession();
+  if (!session || !session.accessToken) return [];
 
-    return db.users
-      .filter((u) => u.role === UserRole.HIRING_MANAGER || u.role === UserRole.HEAD_OF_HR)
-      .map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+  try {
+    const response = await fetch("http://localhost:3000/api/v1/users?limit=200&profile=Hiring Manager", {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+    });
+
+    if (!response.ok) return [];
+
+    const result = await response.json();
+    const users = result.data || [];
+
+    return users
+      .map((u: any) => ({
+        id: u.id,
+        name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
+        email: u.email,
+        role: UserRole.HIRING_MANAGER,
+      }))
+      .sort((a: UserOption, b: UserOption) => a.name.localeCompare(b.name));
   } catch (err) {
     console.error("[fetchHiringManagerUsersAction]", err);
     return [];
   }
 }
 
-// ─── Reassign a specific applicant's Hiring Manager (HEAD_OF_HR / FOUNDER) ───
+// ─── Reassign a specific applicant's Hiring Manager (Admin only) ─────────────
 
 export async function reassignApplicantHMAction(
   applicationId: string,
   newHiringManagerId: string
 ): Promise<{ error?: string }> {
   const session = await getSession();
-  if (!session) return { error: "Not authenticated." };
-  if (session.role !== UserRole.HEAD_OF_HR && session.role !== UserRole.FOUNDER) {
-    return { error: "Only Head of HR or Founder can reassign hiring managers." };
+  if (!session || !session.accessToken) return { error: "Not authenticated." };
+  if (session.role !== UserRole.ADMIN) {
+    return { error: "Only Admin can reassign hiring managers." };
   }
 
   try {
-    const db = readDb();
+    const [candidateId] = applicationId.split("::");
+    if (!candidateId) throw new Error("Invalid application structure.");
 
-    const app = db.applications.find((a) => a.id === applicationId);
-    if (!app) throw new Error("Application not found.");
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
 
-    const job = db.jobs.find((j) => j.id === app.jobId);
-    const newHM = db.users.find((u) => u.id === newHiringManagerId);
-
-    const oldHMVal = app.assignedHiringManagerId || job?.hiringManagerName || "Unassigned";
-    app.assignedHiringManagerId = newHiringManagerId;
-
-    const nextLogId = db.auditLogs.length > 0
-      ? Math.max(...db.auditLogs.map((l) => l.id || 0)) + 1
-      : 1;
-
-    db.auditLogs.push({
-      id: nextLogId,
-      userId: session.id,
-      action: "HM_REASSIGNED",
-      targetTable: "applications",
-      targetId: applicationId,
-      notes: `Hiring Manager reassigned to ${newHM?.name ?? newHiringManagerId}.`,
-      oldValues: { hiringManager: oldHMVal },
-      newValues: { hiringManagerId: newHiringManagerId, name: newHM?.name },
-      timestamp: new Date(),
+    // Reassigning is mapped to giving the Hiring Manager access to the Candidate record
+    const res = await fetch("http://localhost:3000/api/v1/sharing/share", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        resourceType: "Candidate",
+        resourceId: candidateId,
+        sharedToId: newHiringManagerId,
+        accessLevel: "EDIT",
+        cascadeToChildren: false,
+      }),
     });
 
-    writeDb(db);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || "Failed to share candidate record.");
+    }
 
     revalidatePath("/");
     return {};
@@ -165,93 +205,56 @@ export async function assignJobAction(
   input: AssignJobInput
 ): Promise<{ error?: string }> {
   const session = await getSession();
-  if (!session) return { error: "Not authenticated." };
-  if (session.role !== UserRole.HEAD_OF_HR && session.role !== UserRole.FOUNDER) {
-    return { error: "Only Head of HR or Founder can assign job requisitions." };
+  if (!session || !session.accessToken) return { error: "Not authenticated." };
+  if (session.role !== UserRole.ADMIN) {
+    return { error: "Only Admin can assign job requisitions." };
   }
 
   try {
-    const db = readDb();
     let assignedToId = input.assignedToId;
 
     // Create user if they don't exist
     if (!assignedToId) {
       if (!input.newUser) throw new Error("Provide either assignedToId or newUser details.");
 
-      const existing = db.users.find((u) => u.email === input.newUser!.email.trim().toLowerCase());
-      if (existing) {
-        assignedToId = existing.id;
-      } else {
-        const createdId = uuidv4();
-        const createdUser = {
-          id: createdId,
-          name: input.newUser.name,
-          email: input.newUser.email.trim().toLowerCase(),
-          role: input.newUser.role,
-          passwordHash: input.newUser.password,
-          isActive: true,
-          createdAt: new Date(),
-        };
-        db.users.push(createdUser);
-        assignedToId = createdId;
-
-        const nextLogId1 = db.auditLogs.length > 0
-          ? Math.max(...db.auditLogs.map((l) => l.id || 0)) + 1
-          : 1;
-
-        db.auditLogs.push({
-          id: nextLogId1,
-          userId: session.id,
-          action: "USER_CREATED",
-          targetTable: "users",
-          targetId: createdUser.id,
-          notes: `New user created during job assignment. Role: ${input.newUser.role}.`,
-          oldValues: null,
-          newValues: { name: input.newUser.name, email: input.newUser.email, role: input.newUser.role },
-          timestamp: new Date(),
-        });
-      }
-    }
-
-    // Upsert — if already assigned, update the note; else insert fresh
-    const existingAssign = db.jobAssignments.find(
-      (ja) => ja.jobId === input.jobId && ja.assignedToId === assignedToId
-    );
-
-    if (existingAssign) {
-      existingAssign.note = input.note ?? null;
-      existingAssign.assignedById = session.id;
-      existingAssign.assignedAt = new Date();
-    } else {
-      db.jobAssignments.push({
-        id: uuidv4(),
-        jobId: input.jobId,
-        assignedToId: assignedToId!,
-        assignedById: session.id,
-        note: input.note ?? null,
-        assignedAt: new Date(),
+      const createUserRes = await createUserAction({
+        name: input.newUser.name,
+        email: input.newUser.email,
+        password: input.newUser.password,
+        profileName: input.newUser.role,
+        roleName: input.newUser.role,
       });
+
+      if (createUserRes.error) {
+        throw new Error(createUserRes.error);
+      }
+      assignedToId = createUserRes.user?.id;
     }
 
-    const assignedUser = db.users.find((u) => u.id === assignedToId);
+    if (!assignedToId) throw new Error("Failed to resolve user ID for assignment.");
 
-    const nextLogId2 = db.auditLogs.length > 0
-      ? Math.max(...db.auditLogs.map((l) => l.id || 0)) + 1
-      : 1;
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
 
-    db.auditLogs.push({
-      id: nextLogId2,
-      userId: session.id,
-      action: "JOB_ASSIGNED",
-      targetTable: "job_assignments",
-      targetId: input.jobId,
-      notes: `Job assigned to ${assignedUser?.name ?? assignedToId}. ${input.note ? `Note: ${input.note}` : ""}`,
-      oldValues: null,
-      newValues: { jobId: input.jobId, assignedToId, assignedById: session.id },
-      timestamp: new Date(),
+    // Call sharing API to share this Job with the assigned user
+    const res = await fetch("http://localhost:3000/api/v1/sharing/share", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        resourceType: "Job",
+        resourceId: input.jobId,
+        sharedToId: assignedToId,
+        accessLevel: "READ",
+        cascadeToChildren: true,
+      }),
     });
 
-    writeDb(db);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || "Failed to create share rule on backend.");
+    }
 
     revalidatePath("/");
     return {};
@@ -267,33 +270,42 @@ export async function revokeAssignmentAction(
   assignmentId: string
 ): Promise<{ error?: string }> {
   const session = await getSession();
-  if (!session) return { error: "Not authenticated." };
-  if (session.role !== UserRole.HEAD_OF_HR && session.role !== UserRole.FOUNDER) {
-    return { error: "Only Head of HR or Founder can revoke assignments." };
+  if (!session || !session.accessToken) return { error: "Not authenticated." };
+  if (session.role !== UserRole.ADMIN) {
+    return { error: "Only Admin can revoke assignments." };
   }
 
   try {
-    const db = readDb();
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
 
-    db.jobAssignments = db.jobAssignments.filter((ja) => ja.id !== assignmentId);
+    // 1. Fetch sharing rules to find this specific sharing rule details
+    const response = await fetch("http://localhost:3000/api/v1/sharing", {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    if (!response.ok) throw new Error("Failed to retrieve share list.");
+    const shares = await response.json();
+    const s = shares.find((share: any) => share.id === assignmentId);
 
-    const nextLogId = db.auditLogs.length > 0
-      ? Math.max(...db.auditLogs.map((l) => l.id || 0)) + 1
-      : 1;
+    if (!s) throw new Error("Assignment record not found.");
 
-    db.auditLogs.push({
-      id: nextLogId,
-      userId: session.id,
-      action: "JOB_ASSIGNMENT_REVOKED",
-      targetTable: "job_assignments",
-      targetId: assignmentId,
-      notes: "Job assignment revoked by Head of HR.",
-      oldValues: null,
-      newValues: null,
-      timestamp: new Date(),
+    // 2. Call unshare API
+    const revokeRes = await fetch("http://localhost:3000/api/v1/sharing/unshare", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        resourceType: s.resourceType,
+        resourceId: s.resourceId,
+        sharedToId: s.sharedToId,
+      }),
     });
 
-    writeDb(db);
+    if (!revokeRes.ok) {
+      const errData = await revokeRes.json().catch(() => ({}));
+      throw new Error(errData.message || "Failed to revoke share on backend.");
+    }
 
     revalidatePath("/");
     return {};

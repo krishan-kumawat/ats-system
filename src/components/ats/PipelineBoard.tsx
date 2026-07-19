@@ -9,13 +9,21 @@ import {
   Role,
   AuditEntry,
 } from "@/lib/atsStore";
-import { PermissionSet } from "@/lib/permissions";
-
 interface PipelineBoardProps {
   candidates: Candidate[];
   jobs: Job[];
   role: Role;
-  permissions: PermissionSet;
+  permissions: {
+    canAddJob: boolean;
+    canIngestCandidate: boolean;
+    canDragPipeline: boolean;
+    canViewAuditLog: boolean;
+    canApproveOffer: boolean;
+    canViewAnalytics: boolean;
+    canEditScorecard: boolean;
+    canManagePermissions: boolean;
+    canAssignJobs: boolean;
+  };
   onCandidatesChange: (updated: Candidate[]) => void;
   onAuditLog: (entry: AuditEntry) => void;
   onOpenCandidate: (id: string) => void;

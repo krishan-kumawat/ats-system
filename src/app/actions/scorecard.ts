@@ -1,9 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { v4 as uuidv4 } from "uuid";
-import { readDb, writeDb } from "@/db/local-db";
-import { ApprovalStatus, Recommendation, ApplicationStage } from "@/lib/enums";
 import { getSession } from "@/lib/auth";
 import { Candidate } from "@/lib/atsStore";
 
@@ -21,60 +18,35 @@ export interface SaveScorecardInput {
 
 export async function saveScorecardAction(input: SaveScorecardInput): Promise<{ error?: string }> {
   const session = await getSession();
-  if (!session) return { error: "Unauthorized" };
+  if (!session || !session.accessToken) return { error: "Unauthorized" };
 
   try {
-    const db = readDb();
+    const [candidateId, jobId] = input.applicationId.split("::");
+    if (!candidateId || !jobId) throw new Error("Invalid application structure.");
 
-    const existing = db.scorecards.find((s) => s.applicationId === input.applicationId);
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
 
-    if (existing) {
-      existing.technicalScore = input.technicalScore;
-      existing.systemScore = input.systemScore;
-      existing.cultureScore = input.cultureScore;
-      existing.pros = input.pros || null;
-      existing.cons = input.cons || null;
-      existing.recommendation = input.recommendation as Recommendation;
-      existing.createdAt = new Date();
-    } else {
-      db.scorecards.push({
-        id: uuidv4(),
-        applicationId: input.applicationId,
-        reviewerId: session.id,
+    // Update candidate job scorecard fields directly in PostgreSQL
+    const res = await fetch(`http://localhost:3000/api/v1/candidates/${candidateId}/jobs/${jobId}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({
         technicalScore: input.technicalScore,
         systemScore: input.systemScore,
         cultureScore: input.cultureScore,
-        pros: input.pros || null,
-        cons: input.cons || null,
-        recommendation: input.recommendation as Recommendation,
-        createdAt: new Date(),
-      });
-    }
-
-    const avg = ((input.technicalScore + input.systemScore + input.cultureScore) / 3).toFixed(1);
-
-    const nextLogId = db.auditLogs.length > 0
-      ? Math.max(...db.auditLogs.map((l) => l.id || 0)) + 1
-      : 1;
-
-    db.auditLogs.push({
-      id: nextLogId,
-      userId: session.id,
-      action: "LOGGED_SCORECARD",
-      targetTable: "scorecards",
-      targetId: input.applicationId,
-      notes: `Average ratings: ${avg}/5. Recommendation: ${input.recommendation || "NONE"}.`,
-      oldValues: null,
-      newValues: {
-        technicalScore: input.technicalScore,
-        systemScore: input.systemScore,
-        cultureScore: input.cultureScore,
+        pros: input.pros || "",
+        cons: input.cons || "",
         recommendation: input.recommendation,
-      },
-      timestamp: new Date(),
+      }),
     });
 
-    writeDb(db);
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Backend error: ${res.status} ${errText}`);
+    }
 
     revalidatePath("/");
     return {};
@@ -88,42 +60,31 @@ export async function saveScorecardAction(input: SaveScorecardInput): Promise<{ 
 
 export async function approveOfferAction(applicationId: string): Promise<{ error?: string }> {
   const session = await getSession();
-  if (!session) return { error: "Unauthorized" };
+  if (!session || !session.accessToken) return { error: "Unauthorized" };
 
   try {
-    const db = readDb();
+    const [candidateId, jobId] = applicationId.split("::");
+    if (!candidateId || !jobId) throw new Error("Invalid application structure.");
 
-    const approval = db.founderApprovals.find((fa) => fa.applicationId === applicationId);
-    if (!approval || approval.status !== ApprovalStatus.PENDING) {
-      throw new Error("No pending offer found for this application.");
-    }
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
 
-    approval.status = ApprovalStatus.APPROVED;
-    approval.founderId = session.id;
-    approval.actionedAt = new Date();
-
-    const app = db.applications.find((a) => a.id === applicationId);
-    if (app) {
-      app.stage = ApplicationStage.OFFER_APPROVED;
-    }
-
-    const nextLogId = db.auditLogs.length > 0
-      ? Math.max(...db.auditLogs.map((l) => l.id || 0)) + 1
-      : 1;
-
-    db.auditLogs.push({
-      id: nextLogId,
-      userId: session.id,
-      action: "OFFER_APPROVED",
-      targetTable: "founder_approvals",
-      targetId: approval.id,
-      notes: `Offer approved. Salary: $${Number(approval.proposedSalary).toLocaleString("en-US")}.`,
-      oldValues: { status: "PENDING" },
-      newValues: { status: "APPROVED", founderId: session.id },
-      timestamp: new Date(),
+    // Approve offer and transition stage to offered
+    const res = await fetch(`http://localhost:3000/api/v1/candidates/${candidateId}/jobs/${jobId}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({
+        approvalStatus: "APPROVED",
+        status: "Offered",
+      }),
     });
 
-    writeDb(db);
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Backend error: ${res.status} ${errText}`);
+    }
 
     revalidatePath("/");
     return {};
@@ -140,43 +101,32 @@ export async function rejectOfferAction(
   feedback?: string
 ): Promise<{ error?: string }> {
   const session = await getSession();
-  if (!session) return { error: "Unauthorized" };
+  if (!session || !session.accessToken) return { error: "Unauthorized" };
 
   try {
-    const db = readDb();
+    const [candidateId, jobId] = applicationId.split("::");
+    if (!candidateId || !jobId) throw new Error("Invalid application structure.");
 
-    const approval = db.founderApprovals.find((fa) => fa.applicationId === applicationId);
-    if (!approval || approval.status !== ApprovalStatus.PENDING) {
-      throw new Error("No pending offer found for this application.");
-    }
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
 
-    approval.status = ApprovalStatus.REJECTED;
-    approval.founderId = session.id;
-    approval.feedback = feedback ?? null;
-    approval.actionedAt = new Date();
-
-    const app = db.applications.find((a) => a.id === applicationId);
-    if (app) {
-      app.stage = ApplicationStage.INTERVIEWING;
-    }
-
-    const nextLogId = db.auditLogs.length > 0
-      ? Math.max(...db.auditLogs.map((l) => l.id || 0)) + 1
-      : 1;
-
-    db.auditLogs.push({
-      id: nextLogId,
-      userId: session.id,
-      action: "OFFER_REJECTED",
-      targetTable: "founder_approvals",
-      targetId: approval.id,
-      notes: feedback ?? "Offer returned for budget readjustments.",
-      oldValues: { status: "PENDING" },
-      newValues: { status: "REJECTED", founderId: session.id },
-      timestamp: new Date(),
+    // Reject offer and revert status back to interviewing
+    const res = await fetch(`http://localhost:3000/api/v1/candidates/${candidateId}/jobs/${jobId}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({
+        approvalStatus: "REJECTED",
+        approvalFeedback: feedback || "Returned by founder.",
+        status: "Interviewing",
+      }),
     });
 
-    writeDb(db);
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Backend error: ${res.status} ${errText}`);
+    }
 
     revalidatePath("/");
     return {};
@@ -195,58 +145,48 @@ export async function movePipelineAction(
   proposedEquity?: number
 ): Promise<{ error?: string }> {
   const session = await getSession();
-  if (!session) return { error: "Unauthorized" };
+  if (!session || !session.accessToken) return { error: "Unauthorized" };
 
   try {
-    const db = readDb();
+    const [candidateId, jobId] = applicationId.split("::");
+    if (!candidateId || !jobId) throw new Error("Invalid application structure.");
 
-    const app = db.applications.find((a) => a.id === applicationId);
-    if (!app) throw new Error("Application not found.");
-
-    const oldStage = app.stage;
-    const stageMap: Record<Candidate["stage"], ApplicationStage> = {
-      Applied:      ApplicationStage.APPLIED,
-      Screening:    ApplicationStage.SCREENING,
-      Interviewing: ApplicationStage.INTERVIEWING,
-      Offer:        ApplicationStage.OFFER_PREP,
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
     };
 
-    app.stage = stageMap[targetStage];
+    const statusMap: Record<Candidate["stage"], string> = {
+      Applied: "Applied",
+      Screening: "Screening",
+      Interviewing: "Interviewing",
+      Offer: "Offered",
+    };
 
-    if (targetStage === "Offer" && proposedSalary) {
-      const existing = db.founderApprovals.find((fa) => fa.applicationId === applicationId);
-      if (!existing) {
-        db.founderApprovals.push({
-          id: uuidv4(),
-          applicationId,
-          founderId: null,
-          proposedSalary,
-          proposedEquity: proposedEquity ?? null,
-          status: ApprovalStatus.PENDING,
-          feedback: null,
-          createdAt: new Date(),
-          actionedAt: null,
-        });
-      }
+    const updatePayload: any = {
+      status: statusMap[targetStage],
+    };
+
+    if (proposedSalary !== undefined) {
+      updatePayload.proposedSalary = Number(proposedSalary);
+    }
+    if (proposedEquity !== undefined) {
+      updatePayload.proposedEquity = Number(proposedEquity);
+    }
+    if (targetStage === "Offer") {
+      updatePayload.approvalStatus = "PENDING";
     }
 
-    const nextLogId = db.auditLogs.length > 0
-      ? Math.max(...db.auditLogs.map((l) => l.id || 0)) + 1
-      : 1;
-
-    db.auditLogs.push({
-      id: nextLogId,
-      userId: session.id,
-      action: "STAGE_TRANSITION",
-      targetTable: "applications",
-      targetId: applicationId,
-      notes: `Dragged & Dropped: ${oldStage} → ${app.stage}.`,
-      oldValues: { stage: oldStage },
-      newValues: { stage: app.stage },
-      timestamp: new Date(),
+    const res = await fetch(`http://localhost:3000/api/v1/candidates/${candidateId}/jobs/${jobId}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(updatePayload),
     });
 
-    writeDb(db);
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Backend error: ${res.status} ${errText}`);
+    }
 
     revalidatePath("/");
     return {};
@@ -274,58 +214,67 @@ export async function ingestCandidateAction(
   input: IngestCandidateInput
 ): Promise<{ applicationId: string; error?: string }> {
   const session = await getSession();
-  if (!session) return { applicationId: "", error: "Unauthorized" };
+  if (!session || !session.accessToken) return { applicationId: "", error: "Unauthorized" };
 
   try {
-    const db = readDb();
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
 
-    const candidateId = uuidv4();
-    db.candidates.push({
-      id: candidateId,
-      name: input.name,
-      email: input.email,
-      phone: input.phone ?? null,
-      currentCompany: null,
-      skills: input.skills,
-      createdAt: new Date(),
+    // 1. Split name into first and last name
+    const nameParts = input.name.trim().split(/\s+/);
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ") || "Candidate";
+
+    // 2. Create Candidate profile on PostgreSQL backend
+    const createCandRes = await fetch("http://localhost:3000/api/v1/candidates", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        firstName,
+        lastName,
+        email: input.email.toLowerCase().trim(),
+        phone: input.phone || undefined,
+        skills: input.skills || [],
+      }),
     });
 
-    const simulatedFileId = `gdrive_${uuidv4().replace(/-/g, "").slice(0, 20)}`;
-    const appId = uuidv4();
+    if (!createCandRes.ok) {
+      const errData = await createCandRes.json().catch(() => ({}));
+      return { applicationId: "", error: errData.message || "Failed to create candidate profile on backend." };
+    }
 
-    db.applications.push({
-      id: appId,
-      candidateId,
-      jobId: input.jobId ?? "unassigned",
-      stage: ApplicationStage.APPLIED,
-      sourceTag: input.sourceTag ?? "Manual PDF Upload",
-      gDriveFileId: simulatedFileId,
-      gDriveViewUrl: `https://drive.google.com/file/d/${simulatedFileId}/view`,
-      expectedSalary: input.expectedSalary || null,
-      assignedHiringManagerId: null,
-      createdAt: new Date(),
+    const candidate = await createCandRes.json();
+    const targetJobId = input.jobId || "unassigned";
+
+    // 3. Link candidate to job
+    const linkRes = await fetch(`http://localhost:3000/api/v1/candidates/${candidate.id}/jobs`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        jobId: targetJobId,
+        status: "Applied",
+      }),
     });
 
-    const nextLogId = db.auditLogs.length > 0
-      ? Math.max(...db.auditLogs.map((l) => l.id || 0)) + 1
-      : 1;
+    if (!linkRes.ok) {
+      const errData = await linkRes.json().catch(() => ({}));
+      return { applicationId: "", error: errData.message || "Failed to link candidate to job." };
+    }
 
-    db.auditLogs.push({
-      id: nextLogId,
-      userId: session.id,
-      action: "INGESTED_PROFILE",
-      targetTable: "candidates",
-      targetId: candidateId,
-      notes: `Simulated Google Drive file written. Parsed tags: ${input.skills.slice(0, 3).join(", ")}.`,
-      oldValues: null,
-      newValues: { candidateId, applicationId: appId, name: input.name, skills: input.skills },
-      timestamp: new Date(),
+    // 4. Update expectedSalary and sourceTag on the linked CandidateJob record
+    await fetch(`http://localhost:3000/api/v1/candidates/${candidate.id}/jobs/${targetJobId}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({
+        expectedSalary: Number(input.expectedSalary) || 0,
+        sourceTag: input.sourceTag || "Manual PDF Upload",
+      }),
     });
-
-    writeDb(db);
 
     revalidatePath("/");
-    return { applicationId: appId };
+    return { applicationId: `${candidate.id}::${targetJobId}` };
   } catch (err) {
     console.error("[ingestCandidateAction]", err);
     return { applicationId: "", error: "Failed to ingest candidate." };
