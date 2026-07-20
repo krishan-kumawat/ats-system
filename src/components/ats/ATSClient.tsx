@@ -13,9 +13,7 @@ import { UserRole } from "@/lib/enums";
 import { RolePermissions, DEFAULT_ROLE_PERMISSIONS } from "@/lib/permissions";
 import { InitialData } from "@/app/actions/data";
 import { writeAuditAction } from "@/app/actions/audit";
-import { saveRolePermissionsAction } from "@/app/actions/permissions";
-import { movePipelineAction, saveScorecardAction, approveOfferAction, rejectOfferAction } from "@/app/actions/scorecard";
-import Header from "@/components/ats/Header";
+import { movePipelineAction, saveScorecardAction, approveOfferAction, rejectOfferAction } from "@/app/actions/scorecard";import Header from "@/components/ats/Header";
 import Sidebar from "@/components/ats/Sidebar";
 import Toast, { ToastState } from "@/components/ats/Toast";
 import PipelineBoard from "@/components/ats/PipelineBoard";
@@ -176,13 +174,6 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
     await rejectOfferAction(applicationId).catch(() => {});
   }
 
-  async function handleSavePermissions(role: UserRole, set: import("@/lib/permissions").PermissionSet, next: RolePermissions) {
-    setRolePermissions(next);
-    const result = await saveRolePermissionsAction(role, set).catch((err) => ({ error: String(err) }));
-    if (result?.error) {
-      showToast("Save Failed", result.error, "xmark");
-    }
-  }
 
   const allocated = candidates.reduce(
     (acc, c) => acc + (c.proposedSalary || c.expectedSalary || 0),
@@ -290,10 +281,6 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
               isFounder
                 ? (
                   <PermissionsPanel
-                    permissions={rolePermissions}
-                    activeRole={activePermissionRole}
-                    setActiveRole={setActivePermissionRole}
-                    onPermissionsChange={handleSavePermissions}
                     onAuditLog={(entry) => persistAudit(entry, "role_permissions", entry.target)}
                     onToast={showToast}
                   />

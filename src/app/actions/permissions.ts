@@ -2,29 +2,42 @@
 
 import { revalidatePath } from "next/cache";
 import { UserRole } from "@/lib/enums";
-import { getSession } from "@/lib/auth";
-import fs from "fs";
-import path from "path";
+import { getSession, destroySession } from "@/lib/auth";
 import {
-  Permission,
   PermissionSet,
-  RolePermissions,
   ALL_PERMISSIONS,
   BACKEND_PERM_MAP,
 } from "@/lib/permissions";
 
-export async function fetchRolePermissionsAction(): Promise<RolePermissions> {
-  // Not used directly in UI since we load permissions in fetchInitialData(),
-  // but kept for API surface safety.
-  return {} as RolePermissions;
+export async function fetchProfilesAction(): Promise<{ profiles?: any[]; error?: string; unauthorized?: boolean }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { unauthorized: true };
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+    };
+    const res = await fetch("http://localhost:3000/api/v1/profiles", { headers, cache: "no-store" });
+    if (res.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+    if (!res.ok) {
+      throw new Error(`Failed to fetch profiles (Status: ${res.status})`);
+    }
+    const profiles = await res.json();
+    return { profiles };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Failed to fetch profiles." };
+  }
 }
 
-export async function saveRolePermissionsAction(
-  role: UserRole,
+export async function saveProfilePermissionsAction(
+  profileId: string,
   permissions: PermissionSet
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; unauthorized?: boolean }> {
   const session = await getSession();
-  if (!session || !session.accessToken) return { error: "Not authenticated." };
+  if (!session || !session.accessToken) return { unauthorized: true };
   if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can manage permissions." };
 
   try {
@@ -33,98 +46,46 @@ export async function saveRolePermissionsAction(
       "Content-Type": "application/json",
     };
 
-    // 1. Fetch available backend permission codes to map codes to IDs
+    // 1. Fetch available backend permissions to map codes to IDs
     const permsRes = await fetch("http://localhost:3000/api/v1/permissions", { headers });
+    if (permsRes.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
     if (!permsRes.ok) {
-      const errText = await permsRes.text().catch(() => "");
-      throw new Error(`Failed to fetch atomic permissions from backend (Status: ${permsRes.status}): ${errText}`);
+      throw new Error(`Failed to fetch available permissions (Status: ${permsRes.status})`);
     }
     const backendPermsList = await permsRes.json();
-
-    // Map permission code to its database ID
     const codeToId = new Map<string, string>();
     for (const p of backendPermsList) {
       codeToId.set(p.code, p.id);
     }
 
-    // 2. Fetch profiles to locate the profileId for this role
-    const profilesRes = await fetch("http://localhost:3000/api/v1/profiles", { headers });
-    if (!profilesRes.ok) {
-      const errText = await profilesRes.text().catch(() => "");
-      throw new Error(`Failed to fetch profiles from backend (Status: ${profilesRes.status}): ${errText}`);
-    }
-    const profiles = await profilesRes.json();
-
-    // Map role to profile name
-    let targetProfileName = "";
-    if (role === UserRole.ADMIN) targetProfileName = "Admin";
-    else if (role === UserRole.RECRUITER) targetProfileName = "Recruiter";
-    else if (role === UserRole.HIRING_MANAGER) targetProfileName = "Hiring Manager";
-    else if (role === UserRole.READ_ONLY) targetProfileName = "Read Only";
-
-    const matchedProfile = profiles.find(
-      (p: any) =>
-        p.name.toLowerCase().replace(/[\s_-]+/g, "") ===
-        targetProfileName.toLowerCase().replace(/[\s_-]+/g, "")
-    );
-
-    if (!matchedProfile) {
-      throw new Error(`Profile '${targetProfileName}' not found on backend.`);
-    }
-
-    // 3. Compute new set of backend permission codes to assign
-    // Identify which codes are managed by our UI checkboxes
-    const managedCodes = new Set<string>();
-    for (const codes of Object.values(BACKEND_PERM_MAP)) {
-      for (const c of codes) {
-        managedCodes.add(c);
-      }
-    }
-
-    // Get currently assigned codes on this profile
-    const currentCodes = new Set<string>();
-    if (matchedProfile.profilePermissions) {
-      for (const pp of matchedProfile.profilePermissions) {
-        if (pp.permission && pp.permission.code) {
-          currentCodes.add(pp.permission.code);
-        }
-      }
-    }
-
-    // Retain all un-managed codes (so backend-only rules don't get cleared!)
-    const nextCodes = new Set<string>();
-    for (const c of currentCodes) {
-      if (!managedCodes.has(c)) {
-        nextCodes.add(c);
-      }
-    }
-
-    // Add managed codes that are checked in the UI
+    // 2. Map UI selections to backend IDs
+    const nextPermissionIds: string[] = [];
     for (const key of ALL_PERMISSIONS) {
       if (permissions[key]) {
         const codes = BACKEND_PERM_MAP[key] || [];
         for (const c of codes) {
-          nextCodes.add(c);
+          const pid = codeToId.get(c);
+          if (pid && !nextPermissionIds.includes(pid)) {
+            nextPermissionIds.push(pid);
+          }
         }
       }
     }
 
-    // Map backend codes to their database IDs
-    const nextPermissionIds: string[] = [];
-    for (const c of nextCodes) {
-      const pid = codeToId.get(c);
-      if (pid) {
-        nextPermissionIds.push(pid);
-      }
-    }
-
-    // 4. Call backend API to save the profile permissions
-    const saveRes = await fetch(`http://localhost:3000/api/v1/profiles/${matchedProfile.id}/permissions`, {
+    // 3. POST to profile permissions endpoint
+    const saveRes = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}/permissions`, {
       method: "POST",
       headers,
       body: JSON.stringify({ permissionIds: nextPermissionIds }),
     });
 
+    if (saveRes.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
     if (!saveRes.ok) {
       const errData = await saveRes.json().catch(() => ({}));
       throw new Error(errData.message || "Failed to update profile permissions on backend");
@@ -133,15 +94,78 @@ export async function saveRolePermissionsAction(
     revalidatePath("/");
     return {};
   } catch (err) {
-    console.error("[saveRolePermissionsAction] FAILED:", err);
-    try {
-      const logPath = path.join(process.cwd(), "debug.log");
-      const time = new Date().toISOString();
-      const msg = `[${time}] FAILED: ${err instanceof Error ? err.stack : String(err)}\n`;
-      fs.appendFileSync(logPath, msg, "utf-8");
-    } catch (e) {
-      console.error("Failed to write to debug.log", e);
-    }
     return { error: err instanceof Error ? err.message : "Failed to save permissions." };
+  }
+}
+
+export async function createProfileAndCloneAction(
+  name: string,
+  description: string,
+  cloneFromProfileId?: string
+): Promise<{ profile?: any; error?: string; unauthorized?: boolean }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { unauthorized: true };
+  if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can create profiles." };
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
+
+    // 1. Create Profile
+    const createRes = await fetch("http://localhost:3000/api/v1/profiles", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name, description }),
+    });
+
+    if (createRes.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+    if (!createRes.ok) {
+      const errData = await createRes.json().catch(() => ({}));
+      throw new Error(errData.message || "Failed to create profile");
+    }
+    const newProfile = await createRes.json();
+
+    // 2. Clone permissions if selected
+    if (cloneFromProfileId) {
+      const profilesRes = await fetch("http://localhost:3000/api/v1/profiles", { headers });
+      if (profilesRes.status === 401) {
+        await destroySession();
+        return { unauthorized: true };
+      }
+      if (profilesRes.ok) {
+        const profiles = await profilesRes.json();
+        const sourceProfile = profiles.find((p: any) => p.id === cloneFromProfileId);
+        if (sourceProfile && sourceProfile.profilePermissions) {
+          const permissionIds = sourceProfile.profilePermissions
+            .map((pp: any) => pp.permission?.id)
+            .filter(Boolean);
+
+          if (permissionIds.length > 0) {
+            const cloneRes = await fetch(`http://localhost:3000/api/v1/profiles/${newProfile.id}/permissions`, {
+              method: "POST",
+              headers,
+              body: JSON.stringify({ permissionIds }),
+            });
+            if (cloneRes.status === 401) {
+              await destroySession();
+              return { unauthorized: true };
+            }
+            if (!cloneRes.ok) {
+              throw new Error("Profile created, but failed to clone permissions.");
+            }
+          }
+        }
+      }
+    }
+
+    revalidatePath("/");
+    return { profile: newProfile };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Failed to create profile." };
   }
 }

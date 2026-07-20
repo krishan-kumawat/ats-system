@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { fetchUserDetailAction, toggleUserActiveAction, updateUserAction, UserDetailPayload } from "@/app/actions/users";
+import { fetchProfilesAction } from "@/app/actions/permissions";
 import { UserRole } from "@/lib/enums";
 
 interface UserRecordPanelProps {
@@ -11,7 +12,6 @@ interface UserRecordPanelProps {
   onNavigateToRolePermissions?: (role: UserRole) => void;
 }
 
-const ALL_PROFILES = ["Admin", "Recruiter", "Hiring Manager", "Read Only"];
 const ALL_ROLE_NAMES = ["CEO", "HR Head", "Recruitment Manager", "Recruiter"];
 const ALL_DEPARTMENTS = ["Engineering", "HR"];
 
@@ -24,6 +24,7 @@ const FRIENDLY_TABLE_PERMS: Record<string, { name: string; action: string }> = {
 
 export default function UserRecordPanel({ userId, onBack, onToast, onNavigateToRolePermissions }: UserRecordPanelProps) {
   const [userDetail, setUserDetail] = useState<UserDetailPayload | null>(null);
+  const [allProfiles, setAllProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
   const [subTab, setSubTab] = useState<"details" | "permissions">("details");
@@ -54,8 +55,16 @@ export default function UserRecordPanel({ userId, onBack, onToast, onNavigateToR
         setEditRole(res.user.roleName === "None" ? "" : res.user.roleName);
         setEditDept(res.user.departmentName === "None" ? "" : res.user.departmentName);
       }
-      setLoading(false);
-    }
+
+      const profRes = await fetchProfilesAction();
+      if (profRes.unauthorized) {
+        window.location.href = "/login";
+        return;
+      }
+      if (profRes.profiles) {
+        setAllProfiles(profRes.profiles);
+      }
+      setLoading(false);    }
     loadData();
   }, [userId, onToast]);
 
@@ -189,7 +198,7 @@ export default function UserRecordPanel({ userId, onBack, onToast, onNavigateToR
           className={`px-5 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[1px] ${
             subTab === "details"
               ? "border-indigo-650 text-indigo-650 dark:text-indigo-400"
-              : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              : "border-transparent text-slate-550 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
           }`}
         >
           Details
@@ -199,7 +208,7 @@ export default function UserRecordPanel({ userId, onBack, onToast, onNavigateToR
           className={`px-5 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[1px] ${
             subTab === "permissions"
               ? "border-indigo-650 text-indigo-650 dark:text-indigo-400"
-              : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              : "border-transparent text-slate-550 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
           }`}
         >
           Permissions
@@ -218,7 +227,7 @@ export default function UserRecordPanel({ userId, onBack, onToast, onNavigateToR
                   <td className="w-[15%] px-5 py-3 bg-slate-50/50 dark:bg-slate-950/20 text-left font-bold text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-slate-800/80">
                     Name
                   </td>
-                  <td className="w-[35%] px-5 py-3 font-semibold text-slate-900 dark:text-slate-100 border-r border-slate-100 dark:border-slate-800/80">
+                  <td className="w-[35%] px-5 py-3 font-semibold text-slate-900 dark:text-white border-r border-slate-100 dark:border-slate-800/80">
                     {userDetail.firstName} {userDetail.lastName}
                   </td>
                   <td className="w-[15%] px-5 py-3 bg-slate-50/50 dark:bg-slate-950/20 text-left font-bold text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-slate-800/80">
@@ -252,7 +261,7 @@ export default function UserRecordPanel({ userId, onBack, onToast, onNavigateToR
                         else if (norm.includes("hiring") || norm.includes("manager")) roleKey = UserRole.HIRING_MANAGER;
                         onNavigateToRolePermissions?.(roleKey);
                       }}
-                      className="font-semibold text-indigo-650 dark:text-indigo-400 hover:underline cursor-pointer text-left focus:outline-none"
+                      className="font-semibold text-indigo-655 dark:text-indigo-400 hover:underline cursor-pointer text-left focus:outline-none"
                     >
                       {userDetail.profileName}
                     </button>
@@ -285,7 +294,7 @@ export default function UserRecordPanel({ userId, onBack, onToast, onNavigateToR
                       type="checkbox"
                       checked={userDetail.isActive}
                       readOnly
-                      className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-not-allowed pointer-events-none"
+                      className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-650 focus:ring-indigo-500 cursor-not-allowed pointer-events-none"
                     />
                   </td>
                   <td className="px-5 py-3 bg-slate-50/50 dark:bg-slate-950/20 text-left font-bold text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-slate-800/80">
@@ -329,14 +338,14 @@ export default function UserRecordPanel({ userId, onBack, onToast, onNavigateToR
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {assignedPerms.map((p) => (
                       <tr key={p.code} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20">
-                        <td className="px-5 py-3 font-semibold text-slate-900 dark:text-slate-100">
+                        <td className="px-5 py-3 font-semibold text-slate-900 dark:text-white">
                           {p.name}
                         </td>
                         <td className="px-5 py-3 text-slate-700 dark:text-slate-300">
                           {p.action}
                         </td>
                         <td className="px-5 py-3 text-center">
-                          <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-650 dark:text-emerald-450 bg-emerald-50 dark:bg-emerald-950/30 px-2.5 py-1 rounded-lg border border-emerald-100/40 dark:border-emerald-900/30">
+                          <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-655 dark:text-emerald-450 bg-emerald-50 dark:bg-emerald-950/30 px-2.5 py-1 rounded-lg border border-emerald-100/40 dark:border-emerald-900/30">
                             <i className="fa-solid fa-check text-[9px]" /> Assigned
                           </span>
                         </td>
@@ -361,7 +370,7 @@ export default function UserRecordPanel({ userId, onBack, onToast, onNavigateToR
                   <i className="fa-solid fa-user-pen text-white text-sm" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-800 dark:text-slate-200">Edit User Details</h3>
+                  <h3 className="font-bold text-slate-900 dark:text-white">Edit User Details</h3>
                   <p className="text-[11px] text-slate-400 mt-0.5">Update database attributes</p>
                 </div>
               </div>
@@ -382,7 +391,7 @@ export default function UserRecordPanel({ userId, onBack, onToast, onNavigateToR
                     value={editFirstName}
                     onChange={(e) => setEditFirstName(e.target.value)}
                     required
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-808 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                   />
                 </div>
                 <div>
@@ -392,7 +401,7 @@ export default function UserRecordPanel({ userId, onBack, onToast, onNavigateToR
                     value={editLastName}
                     onChange={(e) => setEditLastName(e.target.value)}
                     required
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-808 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                   />
                 </div>
               </div>
@@ -405,7 +414,7 @@ export default function UserRecordPanel({ userId, onBack, onToast, onNavigateToR
                   value={editEmail}
                   onChange={(e) => setEditEmail(e.target.value)}
                   required
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-808 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                 />
               </div>
 
@@ -416,10 +425,10 @@ export default function UserRecordPanel({ userId, onBack, onToast, onNavigateToR
                   <select
                     value={editProfile}
                     onChange={(e) => setEditProfile(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-semibold"
                   >
-                    {ALL_PROFILES.map((p) => (
-                      <option key={p} value={p}>{p}</option>
+                    {allProfiles.map((p) => (
+                      <option key={p.id} value={p.name}>{p.name}</option>
                     ))}
                   </select>
                 </div>
@@ -428,7 +437,7 @@ export default function UserRecordPanel({ userId, onBack, onToast, onNavigateToR
                   <select
                     value={editRole}
                     onChange={(e) => setEditRole(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-semibold"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-808 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-semibold"
                   >
                     <option value="">None</option>
                     {ALL_ROLE_NAMES.map((r) => (
@@ -444,7 +453,7 @@ export default function UserRecordPanel({ userId, onBack, onToast, onNavigateToR
                 <select
                   value={editDept}
                   onChange={(e) => setEditDept(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-semibold"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-808 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-semibold"
                 >
                   <option value="">None</option>
                   {ALL_DEPARTMENTS.map((d) => (
