@@ -356,6 +356,7 @@ export interface UserDetailPayload {
   lastName: string;
   email: string;
   profileName: string;
+  profileId: string;
   roleName: string;
   departmentName: string;
   isActive: boolean;
@@ -364,6 +365,7 @@ export interface UserDetailPayload {
     assigned: { code: string; module: string; entity: string; action: string }[];
     unassigned: { code: string; module: string; entity: string; action: string }[];
   };
+  permissionSets?: any[];
 }
 
 export async function fetchUserDetailAction(userId: string): Promise<{ user?: UserDetailPayload; error?: string; unauthorized?: boolean }> {
@@ -449,6 +451,7 @@ export async function fetchUserDetailAction(userId: string): Promise<{ user?: Us
         lastName: u.lastName || "",
         email: u.email,
         profileName: u.profile?.name || "None",
+        profileId: u.profileId,
         roleName: u.role?.name || "None",
         departmentName: u.department?.name || "None",
         isActive: !u.deletedAt,
@@ -456,6 +459,7 @@ export async function fetchUserDetailAction(userId: string): Promise<{ user?: Us
           ? new Date(u.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
           : "",
         permissions: { assigned, unassigned },
+        permissionSets: u.userPermissionSets || [],
       },
     };
   } catch (err) {
@@ -463,3 +467,59 @@ export async function fetchUserDetailAction(userId: string): Promise<{ user?: Us
     return { error: "Failed to load user details." };
   }
 }
+
+export async function fetchPermissionSetsAction(): Promise<{ permissionSets?: any[]; error?: string; unauthorized?: boolean }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { unauthorized: true };
+
+  try {
+    const headers = { Authorization: `Bearer ${session.accessToken}` };
+    const res = await fetch("http://localhost:3000/api/v1/permission-sets", { headers, cache: "no-store" });
+    if (res.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+    if (!res.ok) {
+      throw new Error(`Failed to fetch permission sets (Status: ${res.status})`);
+    }
+    const permissionSets = await res.json();
+    return { permissionSets: Array.isArray(permissionSets) ? permissionSets : [] };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Failed to fetch permission sets." };
+  }
+}
+
+export async function assignUserPermissionSetsAction(
+  userId: string,
+  permissionSetIds: string[]
+): Promise<{ success?: boolean; error?: string; unauthorized?: boolean }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { unauthorized: true };
+  if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can edit user permission set assignments." };
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
+    const res = await fetch(`http://localhost:3000/api/v1/users/${userId}/permission-sets`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ permissionSetIds }),
+    });
+
+    if (res.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || "Failed to update permission set assignments.");
+    }
+    revalidatePath("/");
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Failed to update permission set assignments." };
+  }
+}
+

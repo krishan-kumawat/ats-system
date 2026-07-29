@@ -167,3 +167,106 @@ export async function createProfileAndCloneAction(
     return { error: err instanceof Error ? err.message : "Failed to create profile." };
   }
 }
+
+export async function cloneProfileAPIAction(
+  profileId: string,
+  name: string,
+  description: string
+): Promise<{ profile?: any; error?: string; unauthorized?: boolean }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { unauthorized: true };
+  if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can clone profiles." };
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
+    const res = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}/clone`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name, description }),
+    });
+
+    if (res.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || "Failed to clone profile.");
+    }
+    const profile = await res.json();
+    revalidatePath("/");
+    return { profile };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Failed to clone profile." };
+  }
+}
+
+export async function updateProfileAPIAction(
+  profileId: string,
+  name: string,
+  description: string
+): Promise<{ profile?: any; error?: string; unauthorized?: boolean }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { unauthorized: true };
+  if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can update profiles." };
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
+    const res = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ name, description }),
+    });
+
+    if (res.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || "Failed to update profile.");
+    }
+    const profile = await res.json();
+    revalidatePath("/");
+    return { profile };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Failed to update profile." };
+  }
+}
+
+export async function deleteProfileAPIAction(
+  profileId: string
+): Promise<{ success?: boolean; error?: string; unauthorized?: boolean }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { unauthorized: true };
+  if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can delete profiles." };
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+    };
+    const res = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}`, {
+      method: "DELETE",
+      headers,
+    });
+
+    if (res.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || "Failed to delete profile.");
+    }
+    revalidatePath("/");
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Failed to delete profile." };
+  }
+}

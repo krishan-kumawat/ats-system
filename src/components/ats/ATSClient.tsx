@@ -103,6 +103,7 @@ export default function ATSClient({
   const [activeCandidateId, setActiveCandidateId] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [, setActivePermissionRole] = useState<UserRole | null>(null);
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
 
   const toastTimer = useRef<NodeJS.Timeout | null>(null);
 
@@ -331,10 +332,21 @@ export default function ATSClient({
                 : <PermissionDenied label="Job Assignment Manager" />
             )}
 
-            {tab === "users" && (
+             {tab === "users" && (
               isFounder
                 ? (selectedUserId
-                    ? <UserRecordPanel userId={selectedUserId} onBack={() => setSelectedUserId(null)} onToast={showToast} />
+                    ? (
+                      <UserRecordPanel
+                        userId={selectedUserId}
+                        onBack={() => setSelectedUserId(null)}
+                        onToast={showToast}
+                        onNavigateToProfile={(profileId) => {
+                          setSelectedUserId(null);
+                          setActiveProfileId(profileId);
+                          setTab("permissions");
+                        }}
+                      />
+                    )
                     : <UsersPanel onToast={showToast} onNavigateToRolePermissions={handleNavigateToRolePermissions} onSelectUserId={setSelectedUserId} />
                   )
                 : <PermissionDenied label="User Management" />
@@ -344,6 +356,8 @@ export default function ATSClient({
               isFounder
                 ? (
                   <PermissionsPanel
+                    initialSelectedProfileId={activeProfileId}
+                    onClearInitialProfile={() => setActiveProfileId(null)}
                     onAuditLog={(entry) => persistAudit(entry, "role_permissions", entry.target)}
                     onToast={showToast}
                   />
