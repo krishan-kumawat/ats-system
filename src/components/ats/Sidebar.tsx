@@ -3,6 +3,7 @@
 import { Role, Tab } from "@/lib/atsStore";
 import { UserRole } from "@/lib/enums";
 import { ROLE_META } from "@/lib/permissions";
+
 interface SidebarProps {
   role: Role;
   userRole: UserRole;
@@ -10,6 +11,8 @@ interface SidebarProps {
   candidateCount: number;
   jobCount: number;
   permissions: {
+    canViewJobs?: boolean;
+    canViewCandidates?: boolean;
     canAddJob: boolean;
     canIngestCandidate: boolean;
     canDragPipeline: boolean;
@@ -32,6 +35,7 @@ export default function Sidebar({
   jobCount,
   permissions,
   onTabChange,
+  onToast,
 }: SidebarProps) {
   const isAdmin = userRole === UserRole.ADMIN;
   const roleMeta = ROLE_META[userRole] || {
@@ -53,7 +57,6 @@ export default function Sidebar({
         {/* User identity card */}
         <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">
-            {/* name initial shown via parent — we don't have name here, use role icon */}
             <i className={`fa-solid ${roleMeta.icon} text-xs`} />
           </div>
           <div className="min-w-0">
@@ -71,38 +74,44 @@ export default function Sidebar({
           </div>
           <nav className="space-y-1">
 
-            {/* Pipeline — always visible */}
-            <button onClick={() => onTabChange("pipeline")} className={tab === "pipeline" ? active : inactive}>
-              <span className="flex items-center gap-3">
-                <i className="fa-solid fa-rectangle-list" />
-                <span>Recruitment Board</span>
-              </span>
-              <span className="bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-bold">
-                {candidateCount}
-              </span>
-            </button>
+            {/* Pipeline — visible if canViewCandidates */}
+            {permissions.canViewCandidates && (
+              <button onClick={() => onTabChange("pipeline")} className={tab === "pipeline" ? active : inactive}>
+                <span className="flex items-center gap-3">
+                  <i className="fa-solid fa-rectangle-list" />
+                  <span>Recruitment Board</span>
+                </span>
+                <span className="bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-bold">
+                  {candidateCount}
+                </span>
+              </button>
+            )}
 
-            {/* Jobs */}
-            <button onClick={() => onTabChange("jobs")} className={tab === "jobs" ? active : inactive}>
-              <span className="flex items-center gap-3">
-                <i className="fa-solid fa-briefcase" />
-                <span>Job Requisitions</span>
-              </span>
-              <span className="bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-bold">
-                {jobCount}
-              </span>
-            </button>
+            {/* Jobs — visible if canViewJobs */}
+            {permissions.canViewJobs && (
+              <button onClick={() => onTabChange("jobs")} className={tab === "jobs" ? active : inactive}>
+                <span className="flex items-center gap-3">
+                  <i className="fa-solid fa-briefcase" />
+                  <span>Job Requisitions</span>
+                </span>
+                <span className="bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-bold">
+                  {jobCount}
+                </span>
+              </button>
+            )}
 
-            {/* Applicants */}
-            <button onClick={() => onTabChange("applicants")} className={tab === "applicants" ? active : inactive}>
-              <span className="flex items-center gap-3">
-                <i className="fa-solid fa-users" />
-                <span>All Applicants</span>
-              </span>
-              <span className="bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-bold">
-                {candidateCount}
-              </span>
-            </button>
+            {/* Applicants — visible if canViewCandidates */}
+            {permissions.canViewCandidates && (
+              <button onClick={() => onTabChange("applicants")} className={tab === "applicants" ? active : inactive}>
+                <span className="flex items-center gap-3">
+                  <i className="fa-solid fa-users" />
+                  <span>All Applicants</span>
+                </span>
+                <span className="bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-bold">
+                  {candidateCount}
+                </span>
+              </button>
+            )}
 
             {/* Analytics — hidden if no permission */}
             {permissions.canViewAnalytics && (

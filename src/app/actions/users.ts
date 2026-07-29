@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { UserRole } from "@/lib/enums";
 import { getSession, destroySession } from "@/lib/auth";
-import { redirect } from "next/navigation";
 
 export interface UserRow {
   id: string;
@@ -50,6 +49,7 @@ export interface FetchUsersResult {
   page: number;
   limit: number;
   roleCounts: Record<UserRole, number>;
+  unauthorized?: boolean;
 }
 
 export async function fetchUsersAction(
@@ -71,6 +71,7 @@ export async function fetchUsersAction(
         [UserRole.HIRING_MANAGER]: 0,
         [UserRole.READ_ONLY]: 0,
       },
+      unauthorized: true,
     };
   }
 
@@ -92,9 +93,20 @@ export async function fetchUsersAction(
     });
 
     if (response.status === 401) {
-      console.warn("[fetchUsersAction] Session expired or unauthorized (401). Redirecting to login.");
       await destroySession();
-      redirect("/login");
+      return {
+        users: [],
+        total: 0,
+        page,
+        limit,
+        roleCounts: {
+          [UserRole.ADMIN]: 0,
+          [UserRole.RECRUITER]: 0,
+          [UserRole.HIRING_MANAGER]: 0,
+          [UserRole.READ_ONLY]: 0,
+        },
+        unauthorized: true,
+      };
     }
 
     if (!response.ok) {
@@ -164,9 +176,9 @@ export async function fetchUsersAction(
 
 export async function createUserAction(
   input: CreateUserInput
-): Promise<{ user?: UserRow; error?: string }> {
+): Promise<{ user?: UserRow; error?: string; unauthorized?: boolean }> {
   const session = await getSession();
-  if (!session || !session.accessToken) return { error: "Not authenticated." };
+  if (!session || !session.accessToken) return { unauthorized: true };
   if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can create users." };
 
   if (!input.name.trim()) return { error: "Name is required." };
@@ -196,6 +208,11 @@ export async function createUserAction(
       }),
     });
 
+    if (response.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
       return { error: errData.message || "Failed to create user." };
@@ -224,9 +241,9 @@ export async function createUserAction(
 
 export async function updateUserAction(
   input: UpdateUserInput
-): Promise<{ user?: UserRow; error?: string }> {
+): Promise<{ user?: UserRow; error?: string; unauthorized?: boolean }> {
   const session = await getSession();
-  if (!session || !session.accessToken) return { error: "Not authenticated." };
+  if (!session || !session.accessToken) return { unauthorized: true };
   if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can edit users." };
 
   if (!input.name.trim()) return { error: "Name is required." };
@@ -261,6 +278,11 @@ export async function updateUserAction(
       body: JSON.stringify(bodyData),
     });
 
+    if (response.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
       return { error: errData.message || "Failed to update user." };
@@ -292,9 +314,9 @@ export async function updateUserAction(
 export async function toggleUserActiveAction(
   userId: string,
   isActive: boolean
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; unauthorized?: boolean }> {
   const session = await getSession();
-  if (!session || !session.accessToken) return { error: "Not authenticated." };
+  if (!session || !session.accessToken) return { unauthorized: true };
   if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can activate/deactivate users." };
   if (userId === session.id) return { error: "You cannot deactivate your own account." };
 
@@ -311,10 +333,16 @@ export async function toggleUserActiveAction(
       },
     });
 
+    if (response.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
       return { error: errData.message || "Failed to deactivate user." };
-    }    revalidatePath("/");
+    }
+    revalidatePath("/");
     return {};
   } catch (err) {
     console.error("[toggleUserActiveAction]", err);
@@ -338,24 +366,36 @@ export interface UserDetailPayload {
   };
 }
 
-export async function fetchUserDetailAction(userId: string): Promise<{ user?: UserDetailPayload; error?: string }> {
+export async function fetchUserDetailAction(userId: string): Promise<{ user?: UserDetailPayload; error?: string; unauthorized?: boolean }> {
   const session = await getSession();
-  if (!session || !session.accessToken) return { error: "Not authenticated." };
+  if (!session || !session.accessToken) return { unauthorized: true };
 
   try {
     const headers = { Authorization: `Bearer ${session.accessToken}` };
 
     // 1. Fetch user record
     const userRes = await fetch(`http://localhost:3000/api/v1/users/${userId}`, { headers });
+    if (userRes.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
     if (!userRes.ok) return { error: "User not found." };
     const u = await userRes.json();
 
     // 2. Fetch all system permissions
     const permsRes = await fetch("http://localhost:3000/api/v1/permissions", { headers });
+    if (permsRes.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
     const allPerms = permsRes.ok ? await permsRes.json() : [];
 
     // 3. Fetch the profile details of the user (to know which permissions the profile has)
     const profilesRes = await fetch("http://localhost:3000/api/v1/profiles", { headers });
+    if (profilesRes.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
     const profiles = profilesRes.ok ? await profilesRes.json() : [];
     const userProfile = profiles.find((p: any) => p.id === u.profileId);
     

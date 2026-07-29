@@ -5,7 +5,6 @@ import {
   Permission,
   PermissionSet,
   PERMISSION_META,
-  ALL_PERMISSIONS,
 } from "@/lib/permissions";
 import { AuditEntry } from "@/lib/atsStore";
 import {
@@ -20,6 +19,42 @@ interface ProfileRecordPanelProps {
   onToast: (title: string, msg: string, icon?: string) => void;
 }
 
+interface ObjectPermissionRow {
+  objectKey: "pipeline" | "jobs" | "profiles";
+  objectLabel: string;
+  createKey: Permission;
+  readKey: Permission;
+  updateKey: Permission;
+  deleteKey: Permission;
+}
+
+const OBJECT_ROWS: ObjectPermissionRow[] = [
+  {
+    objectKey: "pipeline",
+    objectLabel: "Candidates & Applications",
+    createKey: "recruitmentCandidateCreate",
+    readKey: "recruitmentCandidateRead",
+    updateKey: "recruitmentCandidateUpdate",
+    deleteKey: "recruitmentCandidateDelete",
+  },
+  {
+    objectKey: "jobs",
+    objectLabel: "Job Requisitions",
+    createKey: "recruitmentJobCreate",
+    readKey: "recruitmentJobRead",
+    updateKey: "recruitmentJobUpdate",
+    deleteKey: "recruitmentJobDelete",
+  },
+  {
+    objectKey: "profiles",
+    objectLabel: "Profiles (Permissions)",
+    createKey: "recruitmentProfileCreate",
+    readKey: "recruitmentProfileRead",
+    updateKey: "recruitmentProfileUpdate",
+    deleteKey: "recruitmentProfileDelete",
+  },
+];
+
 export default function ProfileRecordPanel({
   profileId,
   onBack,
@@ -29,10 +64,18 @@ export default function ProfileRecordPanel({
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [editPermissions, setEditPermissions] = useState<PermissionSet>({
-    recruitmentJobWrite: false,
+    recruitmentJobCreate: false,
     recruitmentJobRead: false,
-    recruitmentCandidateWrite: false,
+    recruitmentJobUpdate: false,
+    recruitmentJobDelete: false,
+    recruitmentCandidateCreate: false,
     recruitmentCandidateRead: false,
+    recruitmentCandidateUpdate: false,
+    recruitmentCandidateDelete: false,
+    recruitmentProfileCreate: false,
+    recruitmentProfileRead: false,
+    recruitmentProfileUpdate: false,
+    recruitmentProfileDelete: false,
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -51,17 +94,34 @@ export default function ProfileRecordPanel({
         if (found) {
           setProfile(found);
           const initialSet: PermissionSet = {
-            recruitmentJobWrite: false,
+            recruitmentJobCreate: false,
             recruitmentJobRead: false,
-            recruitmentCandidateWrite: false,
+            recruitmentJobUpdate: false,
+            recruitmentJobDelete: false,
+            recruitmentCandidateCreate: false,
             recruitmentCandidateRead: false,
+            recruitmentCandidateUpdate: false,
+            recruitmentCandidateDelete: false,
+            recruitmentProfileCreate: false,
+            recruitmentProfileRead: false,
+            recruitmentProfileUpdate: false,
+            recruitmentProfileDelete: false,
           };
           if (found.profilePermissions) {
             for (const pp of found.profilePermissions) {
-              if (pp.permission?.code === "recruitment:job:write") initialSet.recruitmentJobWrite = true;
-              if (pp.permission?.code === "recruitment:job:read") initialSet.recruitmentJobRead = true;
-              if (pp.permission?.code === "recruitment:candidate:write") initialSet.recruitmentCandidateWrite = true;
-              if (pp.permission?.code === "recruitment:candidate:read") initialSet.recruitmentCandidateRead = true;
+              const code = pp.permission?.code;
+              if (code === "recruitment:job:create") initialSet.recruitmentJobCreate = true;
+              if (code === "recruitment:job:read") initialSet.recruitmentJobRead = true;
+              if (code === "recruitment:job:update") initialSet.recruitmentJobUpdate = true;
+              if (code === "recruitment:job:delete") initialSet.recruitmentJobDelete = true;
+              if (code === "recruitment:candidate:create") initialSet.recruitmentCandidateCreate = true;
+              if (code === "recruitment:candidate:read") initialSet.recruitmentCandidateRead = true;
+              if (code === "recruitment:candidate:update") initialSet.recruitmentCandidateUpdate = true;
+              if (code === "recruitment:candidate:delete") initialSet.recruitmentCandidateDelete = true;
+              if (code === "identity:profile:create") initialSet.recruitmentProfileCreate = true;
+              if (code === "identity:profile:read") initialSet.recruitmentProfileRead = true;
+              if (code === "identity:profile:update") initialSet.recruitmentProfileUpdate = true;
+              if (code === "identity:profile:delete") initialSet.recruitmentProfileDelete = true;
             }
           }
           setEditPermissions(initialSet);
@@ -87,9 +147,8 @@ export default function ProfileRecordPanel({
     } else {
       onToast("Permissions Saved", `Successfully updated permissions for ${profile.name}.`, "user-shield");
 
-      // Audit Log
       const changed = Object.entries(editPermissions)
-        .map(([k, v]) => `${PERMISSION_META[k as Permission].label}: ${v ? "ON" : "OFF"}`)
+        .map(([k, v]) => `${PERMISSION_META[k as Permission]?.label || k}: ${v ? "ON" : "OFF"}`)
         .join(", ");
 
       onAuditLog({
@@ -101,6 +160,20 @@ export default function ProfileRecordPanel({
       });
     }
     setSavingEdit(false);
+  }
+
+  function togglePerm(key: Permission) {
+    setEditPermissions((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  function toggleAllRow(row: ObjectPermissionRow, enable: boolean) {
+    setEditPermissions((prev) => ({
+      ...prev,
+      [row.createKey]: enable,
+      [row.readKey]: enable,
+      [row.updateKey]: enable,
+      [row.deleteKey]: enable,
+    }));
   }
 
   if (loading) {
@@ -117,7 +190,7 @@ export default function ProfileRecordPanel({
       <div className="flex flex-col items-center justify-center h-96 gap-3 text-slate-400 dark:text-slate-500">
         <i className="fa-solid fa-triangle-exclamation text-3xl text-amber-500" />
         <span className="text-sm font-medium">Failed to retrieve profile record.</span>
-        <button onClick={onBack} className="mt-2 text-xs text-indigo-650 hover:underline">
+        <button onClick={onBack} className="mt-2 text-xs text-indigo-600 hover:underline">
           Go back to profiles
         </button>
       </div>
@@ -126,67 +199,130 @@ export default function ProfileRecordPanel({
 
   return (
     <div className="flex flex-col h-full gap-5 text-slate-800 dark:text-slate-200">
-      
       {/* Breadcrumb Header */}
       <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 flex-shrink-0">
         <div>
           <button
             onClick={onBack}
-            className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline font-semibold mb-2"
+            className="inline-flex items-center gap-1.5 text-xs text-indigo-606 hover:text-indigo-808 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline font-semibold mb-2"
           >
             <i className="fa-solid fa-arrow-left" />
             <span>Back to Profiles</span>
           </button>
           <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <i className="fa-solid fa-id-card text-indigo-650" />
+            <i className="fa-solid fa-id-card text-indigo-600" />
             Profile Details: {profile.name}
           </h2>
           <p className="text-xs text-slate-500 mt-1">{profile.description || "No description provided."}</p>
         </div>
       </div>
 
-      {/* Permissions Toggles Form */}
-      <form onSubmit={handleSavePermissions} className="flex-1 overflow-y-auto space-y-6 max-w-3xl pr-2">
+      {/* Permissions Form */}
+      <form onSubmit={handleSavePermissions} className="flex-1 overflow-y-auto space-y-6 max-w-4xl pr-2">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-          <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-950/40 border-b border-slate-100 dark:border-slate-800">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Database Access Rules</h3>
+          
+          <div className="px-5 py-4 bg-slate-50 dark:bg-slate-950/40 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                <i className="fa-solid fa-table-cells text-indigo-500" />
+                Salesforce Object Permissions Matrix (CRUD)
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">Define Create, Read, Update, and Delete access levels per standard object.</p>
+            </div>
           </div>
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {ALL_PERMISSIONS.map((perm) => {
-              const meta = PERMISSION_META[perm];
-              const isOn = editPermissions[perm];
 
-              return (
-                <div
-                  key={perm}
-                  onClick={() => setEditPermissions(prev => ({ ...prev, [perm]: !prev[perm] }))}
-                  className="flex items-center justify-between px-5 py-4 hover:bg-slate-50/50 dark:hover:bg-slate-950/10 cursor-pointer transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      isOn ? "bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400" : "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600"
-                    }`}>
-                      <i className={`fa-solid ${meta.icon} text-xs`} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{meta.label}</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5 font-mono">{meta.description}</p>
-                    </div>
-                  </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-100/70 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[11px]">
+                  <th className="px-5 py-3 text-left font-bold">Standard Object</th>
+                  <th className="px-4 py-3 text-center font-bold">Create (C)</th>
+                  <th className="px-4 py-3 text-center font-bold">Read (R)</th>
+                  <th className="px-4 py-3 text-center font-bold">Update (U)</th>
+                  <th className="px-4 py-3 text-center font-bold text-red-500 dark:text-red-400">Delete (D)</th>
+                  <th className="px-4 py-3 text-center font-bold">Quick Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {OBJECT_ROWS.map((row) => {
+                  const hasC = editPermissions[row.createKey];
+                  const hasR = editPermissions[row.readKey];
+                  const hasU = editPermissions[row.updateKey];
+                  const hasD = editPermissions[row.deleteKey];
+                  const allActive = hasC && hasR && hasU && hasD;
 
-                  {/* Toggle Switch */}
-                  <div className={`relative w-10 h-5.5 rounded-full transition-colors duration-200 ${
-                    isOn ? "bg-indigo-650" : "bg-slate-300 dark:bg-slate-700"
-                  }`}
-                    style={{ minWidth: "40px", height: "22px" }}
-                  >
-                    <span className={`absolute top-0.5 left-0.5 w-[18px] h-[18px] bg-white rounded-full shadow transition-transform duration-200 ${
-                      isOn ? "translate-x-[18px]" : "translate-x-0"
-                    }`} />
-                  </div>
-                </div>
-              );
-            })}
+                  return (
+                    <tr key={row.objectKey} className="hover:bg-slate-50/50 dark:hover:bg-slate-950/10 transition-colors">
+                      <td className="px-5 py-4 font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2.5">
+                        <i className={`fa-solid ${
+                          row.objectKey === "pipeline" 
+                            ? "fa-user-group text-indigo-500" 
+                            : row.objectKey === "jobs"
+                            ? "fa-briefcase text-emerald-500"
+                            : "fa-folder-tree text-amber-500"
+                        } text-sm`} />
+                        <span>{row.objectLabel}</span>
+                      </td>
+
+                      {/* Create Checkbox */}
+                      <td className="px-4 py-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={hasC}
+                          onChange={() => togglePerm(row.createKey)}
+                          className="w-4 h-4 rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        />
+                      </td>
+
+                      {/* Read Checkbox */}
+                      <td className="px-4 py-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={hasR}
+                          onChange={() => togglePerm(row.readKey)}
+                          className="w-4 h-4 rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        />
+                      </td>
+
+                      {/* Update Checkbox */}
+                      <td className="px-4 py-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={hasU}
+                          onChange={() => togglePerm(row.updateKey)}
+                          className="w-4 h-4 rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        />
+                      </td>
+
+                      {/* Delete Checkbox */}
+                      <td className="px-4 py-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={hasD}
+                          onChange={() => togglePerm(row.deleteKey)}
+                          className="w-4 h-4 rounded border-slate-300 dark:border-slate-700 text-red-600 focus:ring-red-500 cursor-pointer"
+                        />
+                      </td>
+
+                      {/* Quick Action Toggle */}
+                      <td className="px-4 py-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => toggleAllRow(row, !allActive)}
+                          className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all border ${
+                            allActive
+                              ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+                              : "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-900"
+                          }`}
+                        >
+                          {allActive ? "Deselect All" : "Select All"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
 

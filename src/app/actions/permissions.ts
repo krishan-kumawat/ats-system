@@ -26,7 +26,7 @@ export async function fetchProfilesAction(): Promise<{ profiles?: any[]; error?:
       throw new Error(`Failed to fetch profiles (Status: ${res.status})`);
     }
     const profiles = await res.json();
-    return { profiles };
+    return { profiles: Array.isArray(profiles) ? profiles : [] };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Failed to fetch profiles." };
   }
@@ -47,7 +47,7 @@ export async function saveProfilePermissionsAction(
     };
 
     // 1. Fetch available backend permissions to map codes to IDs
-    const permsRes = await fetch("http://localhost:3000/api/v1/permissions", { headers });
+    const permsRes = await fetch("http://localhost:3000/api/v1/permissions", { headers, cache: "no-store" });
     if (permsRes.status === 401) {
       await destroySession();
       return { unauthorized: true };
@@ -57,14 +57,18 @@ export async function saveProfilePermissionsAction(
     }
     const backendPermsList = await permsRes.json();
     const codeToId = new Map<string, string>();
-    for (const p of backendPermsList) {
-      codeToId.set(p.code, p.id);
+    if (Array.isArray(backendPermsList)) {
+      for (const p of backendPermsList) {
+        if (p && p.code && p.id) {
+          codeToId.set(p.code, p.id);
+        }
+      }
     }
 
     // 2. Map UI selections to backend IDs
     const nextPermissionIds: string[] = [];
     for (const key of ALL_PERMISSIONS) {
-      if (permissions[key]) {
+      if (permissions && permissions[key]) {
         const codes = BACKEND_PERM_MAP[key] || [];
         for (const c of codes) {
           const pid = codeToId.get(c);
@@ -91,7 +95,10 @@ export async function saveProfilePermissionsAction(
       throw new Error(errData.message || "Failed to update profile permissions on backend");
     }
 
-    revalidatePath("/");
+    try {
+      revalidatePath("/");
+    } catch {}
+
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Failed to save permissions." };
@@ -124,46 +131,37 @@ export async function createProfileAndCloneAction(
       await destroySession();
       return { unauthorized: true };
     }
+
     if (!createRes.ok) {
       const errData = await createRes.json().catch(() => ({}));
-      throw new Error(errData.message || "Failed to create profile");
+      throw new Error(errData.message || "Failed to create profile on backend.");
     }
+
     const newProfile = await createRes.json();
 
-    // 2. Clone permissions if selected
-    if (cloneFromProfileId) {
-      const profilesRes = await fetch("http://localhost:3000/api/v1/profiles", { headers });
-      if (profilesRes.status === 401) {
-        await destroySession();
-        return { unauthorized: true };
-      }
+    // 2. Clone permissions if requested
+    if (cloneFromProfileId && newProfile.id) {
+      const profilesRes = await fetch("http://localhost:3000/api/v1/profiles", { headers, cache: "no-store" });
       if (profilesRes.ok) {
-        const profiles = await profilesRes.json();
-        const sourceProfile = profiles.find((p: any) => p.id === cloneFromProfileId);
-        if (sourceProfile && sourceProfile.profilePermissions) {
-          const permissionIds = sourceProfile.profilePermissions
-            .map((pp: any) => pp.permission?.id)
-            .filter(Boolean);
-
-          if (permissionIds.length > 0) {
-            const cloneRes = await fetch(`http://localhost:3000/api/v1/profiles/${newProfile.id}/permissions`, {
+        const allProfiles = await profilesRes.json();
+        const source = Array.isArray(allProfiles) ? allProfiles.find((p) => p.id === cloneFromProfileId) : null;
+        if (source && source.profilePermissions) {
+          const clonePermIds = source.profilePermissions.map((pp: any) => pp.permissionId).filter(Boolean);
+          if (clonePermIds.length > 0) {
+            await fetch(`http://localhost:3000/api/v1/profiles/${newProfile.id}/permissions`, {
               method: "POST",
               headers,
-              body: JSON.stringify({ permissionIds }),
-            });
-            if (cloneRes.status === 401) {
-              await destroySession();
-              return { unauthorized: true };
-            }
-            if (!cloneRes.ok) {
-              throw new Error("Profile created, but failed to clone permissions.");
-            }
+              body: JSON.stringify({ permissionIds: clonePermIds }),
+            }).catch(() => {});
           }
         }
       }
     }
 
-    revalidatePath("/");
+    try {
+      revalidatePath("/");
+    } catch {}
+
     return { profile: newProfile };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Failed to create profile." };

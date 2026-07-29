@@ -7,6 +7,7 @@ import { Candidate, Role, AuditEntry, Recommendation } from "@/lib/atsStore";
 interface EvaluationWorkspaceProps {
   candidate: Candidate;
   role: Role;
+  canEditScorecard?: boolean;
   onClose: () => void;
   onCandidateUpdate: (updated: Candidate) => void;
   onAuditLog: (entry: AuditEntry) => void;
@@ -19,6 +20,7 @@ interface EvaluationWorkspaceProps {
 export default function EvaluationWorkspace({
   candidate,
   role,
+  canEditScorecard = true,
   onClose,
   onCandidateUpdate,
   onAuditLog,
@@ -133,12 +135,11 @@ export default function EvaluationWorkspace({
           <div className="h-4 w-px bg-slate-200 dark:bg-slate-800" />
           <div>
             <span className="font-bold text-slate-800 dark:text-slate-200">{candidate.name}</span>
-            <span
-              className="text-xs text-slate-400 dark:text-slate-500 ml-2"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
-            >
-              {candidate.id}
-            </span>
+            {candidate.role && (
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium ml-2">
+                ({candidate.role})
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -166,12 +167,6 @@ export default function EvaluationWorkspace({
             <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5 font-semibold">
               <i className="fa-brands fa-google-drive text-indigo-500 dark:text-indigo-400" />
               Google Drive Secure Embed: Resume.pdf
-            </span>
-            <span
-              className="text-[10px] text-slate-400 dark:text-slate-500"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
-            >
-              ID: gdrive_file_id_embed
             </span>
           </div>
           <div className="flex-1 overflow-y-auto p-8 flex justify-center bg-slate-200 dark:bg-slate-900">
@@ -247,217 +242,169 @@ export default function EvaluationWorkspace({
         </div>
 
         {/* Right: Scorecard */}
-        <div className="w-1/2 flex flex-col overflow-y-auto p-8 space-y-6 bg-slate-50 dark:bg-slate-950">
-          <div className="border-b border-slate-200 dark:border-slate-800 pb-2">
-            <h3 className="text-sm font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">
-              Applicant Profile &amp; Scorecard
-            </h3>
-          </div>
-
-          {/* Bio */}
-          <div className="grid grid-cols-2 gap-4 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl p-4 text-xs">
-            <div>
-              <p className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mb-0.5">Email</p>
-              <p className="text-slate-800 dark:text-slate-200 font-semibold">{candidate.email}</p>
-            </div>
-            <div>
-              <p className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mb-0.5">Phone</p>
-              <p className="text-slate-800 dark:text-slate-200 font-semibold">{candidate.phone}</p>
-            </div>
-            <div className="mt-2">
-              <p className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mb-0.5">Assigned Opening</p>
-              <p className="text-slate-800 dark:text-slate-200 font-semibold">{candidate.role}</p>
-            </div>
-            <div className="mt-2">
-              <p className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mb-0.5">Sourcing Origin</p>
-              <p className="text-slate-800 dark:text-slate-200 font-semibold">{candidate.sourceTag}</p>
-            </div>
-          </div>
-
-          {/* Skills */}
+        <div className="w-1/2 flex flex-col overflow-y-auto p-6 space-y-6 bg-white dark:bg-slate-950">
           <div>
-            <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">
-              Automated Skill Tagging Metadata
-            </h4>
-            <div className="flex flex-wrap gap-1.5">
-              {candidate.skills.map((s) => (
-                <span
-                  key={s}
-                  className="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded text-[11px] font-semibold"
-                >
-                  {s}
-                </span>
-              ))}
+            <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Interview Evaluation Scorecard</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Rate technical competencies and document key hiring takeaways.</p>
+          </div>
+
+          <div className="space-y-4 border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-900/50">
+            <div>
+              <div className="flex justify-between text-xs font-semibold mb-1">
+                <span className="text-slate-700 dark:text-slate-300">Technical Depth:</span>
+                <span className="text-indigo-600 dark:text-indigo-400 font-bold">{techScore}/5</span>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={5}
+                value={techScore}
+                disabled={!canEditScorecard}
+                onChange={(e) => setTechScore(Number(e.target.value))}
+                className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between text-xs font-semibold mb-1">
+                <span className="text-slate-700 dark:text-slate-300">System Architecture:</span>
+                <span className="text-indigo-600 dark:text-indigo-400 font-bold">{sysScore}/5</span>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={5}
+                value={sysScore}
+                disabled={!canEditScorecard}
+                onChange={(e) => setSysScore(Number(e.target.value))}
+                className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between text-xs font-semibold mb-1">
+                <span className="text-slate-700 dark:text-slate-300">Cultural & Communication:</span>
+                <span className="text-indigo-600 dark:text-indigo-400 font-bold">{cultureScore}/5</span>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={5}
+                value={cultureScore}
+                disabled={!canEditScorecard}
+                onChange={(e) => setCultureScore(Number(e.target.value))}
+                className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+              />
             </div>
           </div>
 
-          {/* Score sliders */}
-          <div className="space-y-4">
-            <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide border-b border-slate-200 dark:border-slate-800 pb-1">
-              Hiring Manager Technical Ratings
-            </h4>
-            {[
-              { label: "1. Technical Execution Rating", value: techScore, onChange: setTechScore },
-              { label: "2. Systems Architecture Competency", value: sysScore, onChange: setSysScore },
-              { label: "3. Culture Alignment Synergy", value: cultureScore, onChange: setCultureScore },
-            ].map(({ label, value, onChange }) => (
-              <div key={label}>
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-slate-700 dark:text-slate-300 font-medium">{label}</span>
-                  <span className="font-bold text-indigo-600 dark:text-indigo-400">{value} / 5</span>
-                </div>
-                <input
-                  type="range"
-                  min={1}
-                  max={5}
-                  value={value}
-                  onChange={(e) => onChange(parseInt(e.target.value))}
-                  className="w-full h-1 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                />
-              </div>
-            ))}
-          </div>
-
-          {/* Pros / Cons */}
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                  Key Strengths (Pros)
-                </label>
-                <textarea
-                  rows={3}
-                  value={pros}
-                  onChange={(e) => setPros(e.target.value)}
-                  placeholder="Identify strong technical takeaways..."
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                  Identified Concerns (Cons)
-                </label>
-                <textarea
-                  rows={3}
-                  value={cons}
-                  onChange={(e) => setCons(e.target.value)}
-                  placeholder="Identify limitations or red flags..."
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Candidate Strengths (Pros)</label>
+              <textarea
+                rows={2}
+                value={pros}
+                disabled={!canEditScorecard}
+                onChange={(e) => setPros(e.target.value)}
+                placeholder="Highlight technical domain strengths..."
+                className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
             </div>
-            <div className="grid grid-cols-2 gap-4 items-end">
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                  Final Recommendation
-                </label>
-                <select
-                  value={recommendation}
-                  onChange={(e) => setRecommendation(e.target.value as Recommendation)}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="">No Recommendation Selected</option>
-                  <option value="STRONG_HIRE">Strong Hire</option>
-                  <option value="HIRE">Hire</option>
-                  <option value="NO_HIRE">No Hire</option>
-                  <option value="STRONG_NO_HIRE">Strong No Hire</option>
-                </select>
-              </div>
-              <button
-                onClick={saveScorecard}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/20"
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Areas for Growth (Cons)</label>
+              <textarea
+                rows={2}
+                value={cons}
+                disabled={!canEditScorecard}
+                onChange={(e) => setCons(e.target.value)}
+                placeholder="Document skill gaps or missing experience..."
+                className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Overall Recommendation</label>
+              <select
+                value={recommendation}
+                disabled={!canEditScorecard}
+                onChange={(e) => setRecommendation(e.target.value as Recommendation)}
+                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none font-semibold"
               >
-                <i className="fa-regular fa-square-check" /><span>Save Evaluation Scorecard</span>
-              </button>
+                <option value="">No Recommendation Selected</option>
+                <option value="STRONG_HIRE">Strong Hire</option>
+                <option value="HIRE">Hire</option>
+                <option value="NO_HIRE">No Hire</option>
+                <option value="STRONG_NO_HIRE">Strong No Hire</option>
+              </select>
             </div>
           </div>
 
-          {/* Founder compensation gate */}
-          <div className="border-t border-slate-200 dark:border-slate-800 pt-6 space-y-4">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900">
-                Founder Auth Required
-              </span>
-              <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                Compensation Package &amp; Approval Gate
-              </h4>
-            </div>
+          <div className="pt-2 flex justify-end">
+            <button
+              onClick={saveScorecard}
+              disabled={!canEditScorecard}
+              className="px-5 py-2 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-lg shadow-indigo-500/25 transition-all flex items-center gap-2"
+            >
+              <i className="fa-solid fa-floppy-disk" />
+              <span>Save Scorecard</span>
+            </button>
+          </div>
 
-            {role !== "founder" ? (
-              <div className="bg-slate-100 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400">
-                <i className="fa-solid fa-shield-halved text-amber-500 text-lg" />
-                <p>
-                  You are viewing as an{" "}
-                  <span className="font-bold text-slate-800 dark:text-slate-200">HR Recruiter</span>.
-                  Budget numbers and approval mechanisms are secure. Switch to{" "}
-                  <span className="font-bold text-indigo-500">Founder</span> to review and sign off packages.
-                </p>
-              </div>
-            ) : (
-              <div className="bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-4 text-xs">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mb-0.5">
-                      Proposed Base Salary
-                    </p>
-                    <p className="text-slate-800 dark:text-slate-200 font-bold text-sm">
-                      ${(candidate.proposedSalary || candidate.expectedSalary).toLocaleString("en-US")} / year
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mb-0.5">
-                      Proposed Equity Allocation
-                    </p>
-                    <p className="text-slate-800 dark:text-slate-200 font-bold text-sm">
-                      {((candidate.proposedEquity || 0) * 100).toFixed(2)}% Options
-                    </p>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-500 dark:text-slate-400">Gate State:</span>
-                    {approvalStatus === "NONE" && (
-                      <span className="px-2.5 py-0.5 font-bold rounded-lg bg-slate-100 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-800">
-                        NO RUNNING OFFER
-                      </span>
-                    )}
-                    {approvalStatus === "PENDING" && (
-                      <span className="px-2.5 py-0.5 font-bold rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900">
-                        PENDING SIGN-OFF
-                      </span>
-                    )}
-                    {approvalStatus === "APPROVED" && (
-                      <span className="px-2.5 py-0.5 font-bold rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900">
-                        OFFER APPROVED
-                      </span>
-                    )}
-                    {approvalStatus === "REJECTED" && (
-                      <span className="px-2.5 py-0.5 font-bold rounded-lg bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900">
-                        GATE BLOCKED
-                      </span>
-                    )}
-                  </div>
+          {/* Offer Sign-off Gate Section */}
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+            <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                  <i className="fa-solid fa-signature text-indigo-500" />
+                  Founder Executive Sign-Off Gate
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500 dark:text-slate-400">Gate State:</span>
+                  {approvalStatus === "NONE" && (
+                    <span className="px-2.5 py-0.5 font-bold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 text-[10px]">
+                      NO RUNNING OFFER
+                    </span>
+                  )}
                   {approvalStatus === "PENDING" && (
-                    <div className="flex items-center gap-2 w-full md:w-auto">
-                      <button
-                        onClick={approveOffer}
-                        className="flex-1 md:flex-initial bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all text-xs"
-                      >
-                        <i className="fa-solid fa-check" /><span>Approve Offer</span>
-                      </button>
-                      <button
-                        onClick={rejectOffer}
-                        className="flex-1 md:flex-initial bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all text-xs"
-                      >
-                        <i className="fa-solid fa-ban" /><span>Reject Gate</span>
-                      </button>
-                    </div>
+                    <span className="px-2.5 py-0.5 font-bold rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900 text-[10px] animate-pulse">
+                      AWAITING SIGNATURE
+                    </span>
+                  )}
+                  {approvalStatus === "APPROVED" && (
+                    <span className="px-2.5 py-0.5 font-bold rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900 text-[10px]">
+                      APPROVED &amp; SIGNED
+                    </span>
+                  )}
+                  {approvalStatus === "REJECTED" && (
+                    <span className="px-2.5 py-0.5 font-bold rounded-lg bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900 text-[10px]">
+                      RETURNED / REJECTED
+                    </span>
                   )}
                 </div>
               </div>
-            )}
+
+              {role === "founder" && approvalStatus === "PENDING" && (
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    onClick={approveOffer}
+                    className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5"
+                  >
+                    <i className="fa-solid fa-file-signature" />
+                    <span>Approve Offer Package</span>
+                  </button>
+                  <button
+                    onClick={rejectOffer}
+                    className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5"
+                  >
+                    <i className="fa-solid fa-rotate-left" />
+                    <span>Return for Readjustment</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
+
         </div>
       </div>
     </div>

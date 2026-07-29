@@ -1,22 +1,26 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useRef, useMemo, useCallback } from "react";
+import Header from "@/components/ats/Header";
+import Sidebar from "@/components/ats/Sidebar";
+import Toast from "@/components/ats/Toast";
+import PipelineBoard from "@/components/ats/PipelineBoard";
 import {
-  Candidate,
-  AuditEntry,
   Role,
   Tab,
   Job,
+  Candidate,
+  AuditEntry,
 } from "@/lib/atsStore";
-import { SessionPayload } from "@/lib/auth-config";
 import { UserRole } from "@/lib/enums";
-import { RolePermissions, DEFAULT_ROLE_PERMISSIONS } from "@/lib/permissions";
-import { InitialData } from "@/app/actions/data";
+import { SessionPayload } from "@/lib/auth-config";
+import {
+  movePipelineAction,
+  saveScorecardAction,
+  approveOfferAction,
+  rejectOfferAction,
+} from "@/app/actions/scorecard";
 import { writeAuditAction } from "@/app/actions/audit";
-import { movePipelineAction, saveScorecardAction, approveOfferAction, rejectOfferAction } from "@/app/actions/scorecard";import Header from "@/components/ats/Header";
-import Sidebar from "@/components/ats/Sidebar";
-import Toast, { ToastState } from "@/components/ats/Toast";
-import PipelineBoard from "@/components/ats/PipelineBoard";
 import AddCandidateModal from "@/components/ats/AddCandidateModal";
 import EvaluationWorkspace from "@/components/ats/EvaluationWorkspace";
 import AnalyticsPanel from "@/components/ats/AnalyticsPanel";
@@ -28,51 +32,113 @@ import JobAssignmentPanel from "@/components/ats/JobAssignmentPanel";
 import UsersPanel from "@/components/ats/UsersPanel";
 import UserRecordPanel from "@/components/ats/UserRecordPanel";
 
-const TOTAL_BUDGET = 600000;
-
-function toRole(userRole: UserRole): Role {
-  return userRole === UserRole.ADMIN ? "founder" : "recruiter";
-}
+const TOTAL_BUDGET = 1200000;
 
 interface ATSClientProps {
-  user: SessionPayload;
-  initialData: InitialData;
+  user: SessionPayload & {
+    profile?: {
+      id: string;
+      name: string;
+      permissions: {
+        canViewJobs?: boolean;
+        canViewCandidates?: boolean;
+        canAddJob?: boolean;
+        canIngestCandidate?: boolean;
+        canDragPipeline?: boolean;
+        canViewAuditLog?: boolean;
+        canApproveOffer?: boolean;
+        canViewAnalytics?: boolean;
+        canEditScorecard?: boolean;
+        canManagePermissions?: boolean;
+        canAssignJobs?: boolean;
+      };
+    };
+  };
+  initialData?: {
+    jobs: Job[];
+    candidates: Candidate[];
+    auditLogs: AuditEntry[];
+  };
+  jobs?: Job[];
+  candidates?: Candidate[];
+  auditLogs?: AuditEntry[];
 }
 
-export default function ATSClient({ user, initialData }: ATSClientProps) {
-  const [role, setRole] = useState<Role>(() => toRole(user.role));
-  const [tab, setTab] = useState<Tab>("pipeline");
-  const [theme, setTheme] = useState<"dark" | "light">("light");
-  const [candidates, setCandidates] = useState<Candidate[]>(initialData.candidates);
-  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>(initialData.auditLogs);
-  const [jobs, setJobs] = useState<Job[]>(initialData.jobs);
-  const [rolePermissions, setRolePermissions] = useState<RolePermissions>(
-    initialData.rolePermissions ?? DEFAULT_ROLE_PERMISSIONS
-  );
-  const [activeCandidateId, setActiveCandidateId] = useState<string | null>(null);
+export default function ATSClient({
+  user,
+  initialData,
+  jobs: propsJobs,
+  candidates: propsCandidates,
+  auditLogs: propsAuditLogs,
+}: ATSClientProps) {
+  const initialJobs = initialData?.jobs ?? propsJobs ?? [];
+  const initialCandidates = initialData?.candidates ?? propsCandidates ?? [];
+  const initialAuditLogs = initialData?.auditLogs ?? propsAuditLogs ?? [];
+
+  const [tab, setTab] = useState<Tab>(() => {
+    const isAdmin = user.role === UserRole.ADMIN;
+    const permissions = isAdmin
+      ? { canViewCandidates: true, canViewJobs: true }
+      : user.profile?.permissions || {};
+
+    const canViewCandidates = isAdmin || permissions.canViewCandidates !== false;
+    const canViewJobs = isAdmin || permissions.canViewJobs !== false;
+
+    if (canViewCandidates) {
+      return "pipeline";
+    }
+    if (canViewJobs) {
+      return "jobs";
+    }
+    return "pipeline";
+  });
+
+  const [role, setRole] = useState<Role>("founder");
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [toast, setToast] = useState({ title: "", message: "", icon: "", visible: false });
+  const [jobs, setJobs] = useState<Job[]>(initialJobs);
+  const [candidates, setCandidates] = useState<Candidate[]>(initialCandidates);
+  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>(initialAuditLogs);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [toast, setToast] = useState<ToastState>({ title: "", message: "", icon: "info", visible: false });
-  const [activePermissionRole, setActivePermissionRole] = useState<UserRole>(UserRole.RECRUITER);
+  const [activeCandidateId, setActiveCandidateId] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [, setActivePermissionRole] = useState<UserRole | null>(null);
 
-  const myPerms = {
-    canAddJob:            rolePermissions[user.role]?.recruitmentJobWrite ?? false,
-    canIngestCandidate:   rolePermissions[user.role]?.recruitmentCandidateWrite ?? false,
-    canDragPipeline:      rolePermissions[user.role]?.recruitmentCandidateWrite ?? false,
-    canViewAuditLog:      user.role === UserRole.ADMIN,
-    canApproveOffer:      user.role === UserRole.ADMIN,
-    canViewAnalytics:     (rolePermissions[user.role]?.recruitmentJobRead || rolePermissions[user.role]?.recruitmentCandidateRead) ?? false,
-    canEditScorecard:     rolePermissions[user.role]?.recruitmentCandidateWrite ?? false,
-    canManagePermissions: user.role === UserRole.ADMIN,
-    canAssignJobs:        rolePermissions[user.role]?.recruitmentJobWrite ?? false,
-  };
-  const isFounder = user.role === UserRole.ADMIN;
+  const toastTimer = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    const html = document.documentElement;
-    theme === "dark" ? html.classList.add("dark") : html.classList.remove("dark");
-  }, [theme]);
+  const isFounder = role === "founder" && user.role === UserRole.ADMIN;
+
+  const myPerms = useMemo(() => {
+    if (isFounder) {
+      return {
+        canViewJobs: true,
+        canViewCandidates: true,
+        canAddJob: true,
+        canIngestCandidate: true,
+        canDragPipeline: true,
+        canViewAuditLog: true,
+        canApproveOffer: true,
+        canViewAnalytics: true,
+        canEditScorecard: true,
+        canManagePermissions: true,
+        canAssignJobs: true,
+      };
+    }
+    const dbPerms = user.profile?.permissions || {};
+    return {
+      canViewJobs: (dbPerms as any).recruitmentJobRead !== false && dbPerms.canViewJobs !== false,
+      canViewCandidates: (dbPerms as any).recruitmentCandidateRead !== false && dbPerms.canViewCandidates !== false,
+      canAddJob: !!((dbPerms as any).recruitmentJobCreate ?? dbPerms.canAddJob),
+      canIngestCandidate: !!((dbPerms as any).recruitmentCandidateCreate ?? dbPerms.canIngestCandidate),
+      canDragPipeline: !!((dbPerms as any).recruitmentCandidateUpdate ?? dbPerms.canDragPipeline),
+      canViewAuditLog: !!dbPerms.canViewAuditLog,
+      canApproveOffer: !!dbPerms.canApproveOffer,
+      canViewAnalytics: !!dbPerms.canViewAnalytics,
+      canEditScorecard: !!((dbPerms as any).recruitmentCandidateUpdate ?? dbPerms.canEditScorecard),
+      canManagePermissions: !!dbPerms.canManagePermissions,
+      canAssignJobs: !!dbPerms.canAssignJobs,
+    };
+  }, [isFounder, user.profile]);
 
   const showToast = useCallback((title: string, msg: string, icon = "info") => {
     if (msg === "__OPEN_ADD_MODAL__") {
@@ -147,7 +213,6 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
     proposedSalary?: number,
     proposedEquity?: number
   ) {
-    // Optimistic update handled in PipelineBoard; persist to DB
     await movePipelineAction(candidateId, targetStage, proposedSalary, proposedEquity).catch(() => {});
   }
 
@@ -173,7 +238,6 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
   async function handleRejectOffer(applicationId: string) {
     await rejectOfferAction(applicationId).catch(() => {});
   }
-
 
   const allocated = candidates.reduce(
     (acc, c) => acc + (c.proposedSalary || c.expectedSalary || 0),
@@ -216,7 +280,6 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
           <Toast toast={toast} />
 
           <div className="flex-1 flex flex-col overflow-hidden p-6">
-
             {tab === "pipeline" && (
               <PipelineBoard
                 candidates={candidates}
@@ -304,6 +367,7 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
         <EvaluationWorkspace
           candidate={activeCandidate}
           role={role}
+          canEditScorecard={myPerms.canEditScorecard}
           onClose={() => setActiveCandidateId(null)}
           onCandidateUpdate={handleCandidateUpdate}
           onAuditLog={(entry) => persistAudit(entry, "scorecards", activeCandidate.id)}

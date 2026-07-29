@@ -585,10 +585,13 @@ export default function UsersPanel({ onToast, onNavigateToRolePermissions, onSel
     return () => clearTimeout(handler);
   }, [search]);
 
-  // Handle data fetching
   const fetchData = useCallback(() => {
     startTransition(async () => {
       const data = await fetchUsersAction(page, limit, debouncedSearch, roleFilter);
+      if (data.unauthorized) {
+        window.location.href = "/login";
+        return;
+      }
       setUsers(data.users);
       setTotal(data.total);
       if (data.roleCounts) {
@@ -745,7 +748,7 @@ export default function UsersPanel({ onToast, onNavigateToRolePermissions, onSel
                             <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 ${u.isActive ? "bg-emerald-500" : "bg-slate-400"}`} />
                           </div>
                           <div className="min-w-0">
-                            <p className="font-semibold text-slate-800 dark:text-slate-200 group-hover:text-indigo-650 dark:group-hover:text-indigo-400 truncate">{u.name}</p>
+                            <p className="font-semibold text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{u.name}</p>
                             <p className="text-[10px] text-slate-400 truncate md:hidden">{u.email}</p>
                           </div>
                         </button>

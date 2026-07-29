@@ -164,7 +164,7 @@ export default function PermissionsPanel({
                   <td className="px-5 py-3.5 font-bold">
                     <button
                       onClick={() => setSelectedProfileId(p.id)}
-                      className="text-indigo-650 hover:text-indigo-850 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline text-left font-bold focus:outline-none"
+                      className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline text-left font-bold focus:outline-none"
                     >
                       {p.name}
                     </button>
@@ -173,14 +173,14 @@ export default function PermissionsPanel({
                     {p.description || "—"}
                   </td>
                   <td className="px-5 py-3.5 text-center">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-650 dark:bg-indigo-950/30">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-600 dark:bg-indigo-950/30">
                       {assignedCount}/4 Assigned
                     </span>
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     <button
                       onClick={() => setSelectedProfileId(p.id)}
-                      className="px-3 py-1 text-xs font-semibold text-indigo-650 hover:text-indigo-805 dark:text-indigo-400 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-all"
+                      className="px-3 py-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-all"
                     >
                       Manage
                     </button>
@@ -200,7 +200,7 @@ export default function PermissionsPanel({
             {/* Modal Header */}
             <div className="px-6 pt-5 pb-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-indigo-655 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 font-bold">
                   <i className="fa-solid fa-plus text-white text-sm" />
                 </div>
                 <div>
@@ -269,7 +269,7 @@ export default function PermissionsPanel({
               <button
                 type="submit"
                 disabled={creatingProfile}
-                className="px-5 py-2 text-xs font-semibold rounded-xl bg-indigo-650 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-lg shadow-indigo-500/25 transition-all flex items-center gap-2"
+                className="px-5 py-2 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-lg shadow-indigo-500/25 transition-all flex items-center gap-2"
               >
                 {creatingProfile ? (
                   <>

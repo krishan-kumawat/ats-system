@@ -1,10 +1,18 @@
 import { UserRole } from "@/lib/enums";
 
 export type Permission =
-  | "recruitmentJobWrite"
+  | "recruitmentJobCreate"
   | "recruitmentJobRead"
-  | "recruitmentCandidateWrite"
-  | "recruitmentCandidateRead";
+  | "recruitmentJobUpdate"
+  | "recruitmentJobDelete"
+  | "recruitmentCandidateCreate"
+  | "recruitmentCandidateRead"
+  | "recruitmentCandidateUpdate"
+  | "recruitmentCandidateDelete"
+  | "recruitmentProfileCreate"
+  | "recruitmentProfileRead"
+  | "recruitmentProfileUpdate"
+  | "recruitmentProfileDelete";
 
 export type PermissionSet = Record<Permission, boolean>;
 export type RolePermissions = Record<UserRole, PermissionSet>;
@@ -13,40 +21,105 @@ export interface PermissionMeta {
   label: string;
   description: string;
   icon: string;
-  category: "pipeline" | "jobs";
+  category: "pipeline" | "jobs" | "profiles";
+  crudType: "C" | "R" | "U" | "D";
   danger?: boolean;
 }
 
 export const PERMISSION_META: Record<Permission, PermissionMeta> = {
-  recruitmentCandidateWrite: {
-    label: "Database: Candidate Write",
-    description: "recruitment:candidate:write",
-    icon: "fa-database",
+  recruitmentCandidateCreate: {
+    label: "Create Candidate",
+    description: "recruitment:candidate:create",
+    icon: "fa-user-plus",
     category: "pipeline",
+    crudType: "C",
   },
   recruitmentCandidateRead: {
-    label: "Database: Candidate Read",
+    label: "Read Candidate",
     description: "recruitment:candidate:read",
-    icon: "fa-database",
+    icon: "fa-user-shield",
     category: "pipeline",
+    crudType: "R",
   },
-  recruitmentJobWrite: {
-    label: "Database: Job Write",
-    description: "recruitment:job:write",
-    icon: "fa-database",
+  recruitmentCandidateUpdate: {
+    label: "Update Candidate",
+    description: "recruitment:candidate:update",
+    icon: "fa-user-pen",
+    category: "pipeline",
+    crudType: "U",
+  },
+  recruitmentCandidateDelete: {
+    label: "Delete Candidate",
+    description: "recruitment:candidate:delete",
+    icon: "fa-user-minus",
+    category: "pipeline",
+    crudType: "D",
+    danger: true,
+  },
+  recruitmentJobCreate: {
+    label: "Create Job",
+    description: "recruitment:job:create",
+    icon: "fa-circle-plus",
     category: "jobs",
+    crudType: "C",
   },
   recruitmentJobRead: {
-    label: "Database: Job Read",
+    label: "Read Job",
     description: "recruitment:job:read",
-    icon: "fa-database",
+    icon: "fa-eye",
     category: "jobs",
+    crudType: "R",
+  },
+  recruitmentJobUpdate: {
+    label: "Update Job",
+    description: "recruitment:job:update",
+    icon: "fa-pen-to-square",
+    category: "jobs",
+    crudType: "U",
+  },
+  recruitmentJobDelete: {
+    label: "Delete Job",
+    description: "recruitment:job:delete",
+    icon: "fa-trash-can",
+    category: "jobs",
+    crudType: "D",
+    danger: true,
+  },
+  recruitmentProfileCreate: {
+    label: "Create Profile",
+    description: "identity:profile:create",
+    icon: "fa-folder-plus",
+    category: "profiles",
+    crudType: "C",
+  },
+  recruitmentProfileRead: {
+    label: "Read Profile",
+    description: "identity:profile:read",
+    icon: "fa-folder-open",
+    category: "profiles",
+    crudType: "R",
+  },
+  recruitmentProfileUpdate: {
+    label: "Update Profile",
+    description: "identity:profile:update",
+    icon: "fa-folder-minus",
+    category: "profiles",
+    crudType: "U",
+  },
+  recruitmentProfileDelete: {
+    label: "Delete Profile",
+    description: "identity:profile:delete",
+    icon: "fa-folder-tree",
+    category: "profiles",
+    crudType: "D",
+    danger: true,
   },
 };
 
 export const CATEGORY_META: Record<string, { label: string; color: string }> = {
-  pipeline: { label: "Pipeline", color: "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40" },
-  jobs:     { label: "Jobs",     color: "text-emerald-600 dark:text-emerald-455 bg-emerald-50 dark:bg-emerald-950/40" },
+  pipeline: { label: "Candidates & Applications", color: "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40" },
+  jobs:     { label: "Job Requisitions",         color: "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40" },
+  profiles: { label: "Profiles & Permissions",   color: "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40" },
 };
 
 export const ROLE_META: Record<UserRole, { label: string; color: string; bg: string; icon: string }> = {
@@ -80,28 +153,60 @@ export const ADMIN_LOCKED_PERMISSIONS = new Set<Permission>([]);
 
 export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
   [UserRole.ADMIN]: {
-    recruitmentJobWrite:        true,
+    recruitmentJobCreate:       true,
     recruitmentJobRead:         true,
-    recruitmentCandidateWrite:  true,
-    recruitmentCandidateRead:   true,
+    recruitmentJobUpdate:       true,
+    recruitmentJobDelete:       true,
+    recruitmentCandidateCreate:  true,
+    recruitmentCandidateRead:    true,
+    recruitmentCandidateUpdate:  true,
+    recruitmentCandidateDelete:  true,
+    recruitmentProfileCreate:    true,
+    recruitmentProfileRead:      true,
+    recruitmentProfileUpdate:    true,
+    recruitmentProfileDelete:    true,
   },
   [UserRole.RECRUITER]: {
-    recruitmentJobWrite:        true,
+    recruitmentJobCreate:       true,
     recruitmentJobRead:         true,
-    recruitmentCandidateWrite:  true,
-    recruitmentCandidateRead:   true,
+    recruitmentJobUpdate:       true,
+    recruitmentJobDelete:       false,
+    recruitmentCandidateCreate:  true,
+    recruitmentCandidateRead:    true,
+    recruitmentCandidateUpdate:  true,
+    recruitmentCandidateDelete:  false,
+    recruitmentProfileCreate:    false,
+    recruitmentProfileRead:      true,
+    recruitmentProfileUpdate:    false,
+    recruitmentProfileDelete:    false,
   },
   [UserRole.HIRING_MANAGER]: {
-    recruitmentJobWrite:        false,
+    recruitmentJobCreate:       false,
     recruitmentJobRead:         true,
-    recruitmentCandidateWrite:  false,
-    recruitmentCandidateRead:   true,
+    recruitmentJobUpdate:       false,
+    recruitmentJobDelete:       false,
+    recruitmentCandidateCreate:  false,
+    recruitmentCandidateRead:    true,
+    recruitmentCandidateUpdate:  true,
+    recruitmentCandidateDelete:  false,
+    recruitmentProfileCreate:    false,
+    recruitmentProfileRead:      true,
+    recruitmentProfileUpdate:    false,
+    recruitmentProfileDelete:    false,
   },
   [UserRole.READ_ONLY]: {
-    recruitmentJobWrite:        false,
+    recruitmentJobCreate:       false,
     recruitmentJobRead:         true,
-    recruitmentCandidateWrite:  false,
-    recruitmentCandidateRead:   true,
+    recruitmentJobUpdate:       false,
+    recruitmentJobDelete:       false,
+    recruitmentCandidateCreate:  false,
+    recruitmentCandidateRead:    true,
+    recruitmentCandidateUpdate:  false,
+    recruitmentCandidateDelete:  false,
+    recruitmentProfileCreate:    false,
+    recruitmentProfileRead:      true,
+    recruitmentProfileUpdate:    false,
+    recruitmentProfileDelete:    false,
   },
 };
 
@@ -109,8 +214,16 @@ export const ALL_PERMISSIONS = Object.keys(PERMISSION_META) as Permission[];
 export const EDITABLE_ROLES = [UserRole.RECRUITER, UserRole.HIRING_MANAGER, UserRole.READ_ONLY];
 
 export const BACKEND_PERM_MAP: Record<Permission, string[]> = {
-  recruitmentJobWrite:        ["recruitment:job:write"],
+  recruitmentJobCreate:       ["recruitment:job:create"],
   recruitmentJobRead:         ["recruitment:job:read"],
-  recruitmentCandidateWrite:  ["recruitment:candidate:write"],
+  recruitmentJobUpdate:       ["recruitment:job:update"],
+  recruitmentJobDelete:       ["recruitment:job:delete"],
+  recruitmentCandidateCreate: ["recruitment:candidate:create"],
   recruitmentCandidateRead:   ["recruitment:candidate:read"],
+  recruitmentCandidateUpdate: ["recruitment:candidate:update"],
+  recruitmentCandidateDelete: ["recruitment:candidate:delete"],
+  recruitmentProfileCreate:    ["identity:profile:create"],
+  recruitmentProfileRead:      ["identity:profile:read"],
+  recruitmentProfileUpdate:    ["identity:profile:update"],
+  recruitmentProfileDelete:    ["identity:profile:delete"],
 };

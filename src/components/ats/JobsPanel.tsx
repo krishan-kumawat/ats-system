@@ -91,7 +91,7 @@ export default function JobsPanel({ jobs, candidates, canAddJob, onJobAdd, onToa
             ))}
           </div>
 
-          {canAddJob ? (
+          {canAddJob && (
             <button
               onClick={() => setShowAddModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-lg shadow-indigo-500/20 transition-all"
@@ -99,13 +99,7 @@ export default function JobsPanel({ jobs, candidates, canAddJob, onJobAdd, onToa
               <i className="fa-solid fa-plus" />
               <span>Add Job</span>
             </button>
-          ) : (
-            <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 cursor-not-allowed">
-              <i className="fa-solid fa-lock" />
-              <span>Add Job</span>
-            </div>
-          )}
-        </div>
+          )}        </div>
       </div>
 
       {/* Stats row */}
@@ -159,7 +153,7 @@ export default function JobsPanel({ jobs, candidates, canAddJob, onJobAdd, onToa
                 >
                   <div className="col-span-4">
                     <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{job.title}</p>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{job.id} &middot; {job.createdAt}</p>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Created on {job.createdAt}</p>
                   </div>
                   <div className="col-span-2">
                     <span className="text-xs text-slate-600 dark:text-slate-400">{job.department}</span>
@@ -252,7 +246,7 @@ function ApplicationsView({
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {job.id} &middot; {job.department} &middot; HM: {job.hiringManager} &middot; Budget: ${job.budgetLimit.toLocaleString("en-US")}
+              {job.department} &middot; HM: {job.hiringManager} &middot; Budget: ${job.budgetLimit.toLocaleString("en-US")}
             </p>
           </div>
         </div>
