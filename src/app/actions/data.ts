@@ -84,6 +84,7 @@ export async function fetchInitialData(): Promise<InitialData> {
     // 1. Fetch Jobs from PostgreSQL Backend
     const jobsRes = await fetch("http://localhost:3000/api/v1/jobs", { headers });
     const backendJobs = jobsRes.ok ? await jobsRes.json() : [];
+    console.log("JOBS DATA 1: ", backendJobs);
 
     const jobs: Job[] = backendJobs.map((j: any) => ({
       id: j.id,
@@ -246,5 +247,41 @@ export async function fetchApplicantsAction(jobId?: string): Promise<any[]> {
   } catch (err) {
     console.error("[fetchApplicantsAction]", err);
     return [];
+  }
+}
+
+export async function fetchObjectRecordsAction(objectApiName: string, page = 1, limit = 10, search = "") {
+  const session = await getSession();
+  if (!session || !session.accessToken) {
+    throw new Error("Unauthorized: Access token is missing or expired.");
+  }
+
+  let endpointName = `${objectApiName.toLowerCase()}s`;
+  if (objectApiName.toLowerCase() === "auditlog") {
+    endpointName = "audit-logs";
+  }
+
+  const url = `http://localhost:3000/api/v1/${endpointName}?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || `Server returned ${res.status}: ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    const rows = Array.isArray(data) ? data : (data.data || []);
+    const total = Array.isArray(data) ? data.length : (Number(data.total) || rows.length);
+    return { data: rows, total, page, limit };
+  } catch (err: any) {
+    console.error(`[fetchObjectRecordsAction] error fetching ${objectApiName}:`, err);
+    throw err;
   }
 }

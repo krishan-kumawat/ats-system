@@ -6,7 +6,7 @@ import { getSession } from "@/lib/auth";
 import { createUserAction } from "./users";
 
 export interface AssignmentRow {
-  id: string;
+  id: string; // Map to `${jobId}::${assignedToId}`
   jobId: string;
   jobTitle: string;
   department: string;
@@ -54,33 +54,53 @@ export async function fetchAssignmentsAction(): Promise<AssignmentRow[]> {
   if (!session || !session.accessToken) return [];
 
   try {
-    const response = await fetch("http://localhost:3000/api/v1/sharing", {
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-      },
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+    };
+
+    // 1. Fetch all jobs
+    const jobsRes = await fetch("http://localhost:3000/api/v1/jobs", { headers });
+    if (!jobsRes.ok) return [];
+    const jobs = await jobsRes.json();
+    console.log("JOBS DATA: ", jobs);
+
+    const rows: AssignmentRow[] = [];
+
+    // 2. For each job, fetch collaborators from backend sharing API (simulated as Account type)
+    const promises = jobs.map(async (job: any) => {
+      try {
+        const shareRes = await fetch(
+          `http://localhost:3000/api/v1/sharing/collaborators?recordId=${job.id}&objectType=Account`,
+          { headers }
+        );
+        if (shareRes.ok) {
+          const collaborators = await shareRes.json();
+          for (const col of collaborators) {
+            if (col.rowCause === "MANUAL") {
+              rows.push({
+                id: `${job.id}::${col.userId}`,
+                jobId: job.id,
+                jobTitle: job.title,
+                department: job.department?.name || "Unassigned",
+                assignedToId: col.userId,
+                assignedToName: col.userName || col.userEmail || "Unknown",
+                assignedToEmail: col.userEmail || "",
+                assignedToRole: col.accessLevel,
+                assignedByName: "System",
+                note: `Access level: ${col.accessLevel}`,
+                assignedAt: new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }),
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`Failed to fetch collaborators for job ${job.id}:`, err);
+      }
     });
 
-    if (!response.ok) return [];
+    await Promise.all(promises);
 
-    const shares = await response.json();
-
-    const rows: AssignmentRow[] = shares.map((s: any) => ({
-      id: s.id,
-      jobId: s.resourceId,
-      jobTitle: s.job?.title || "Unknown Job",
-      department: s.job?.department || "Unassigned",
-      assignedToId: s.sharedToId,
-      assignedToName: s.sharedTo ? `${s.sharedTo.firstName} ${s.sharedTo.lastName}`.trim() : "",
-      assignedToEmail: s.sharedTo?.email || "",
-      assignedToRole: s.sharedTo?.profile?.name || "",
-      assignedByName: s.sharedBy ? `${s.sharedBy.firstName} ${s.sharedBy.lastName}`.trim() : "System",
-      note: `Access level: ${s.accessLevel}`,
-      assignedAt: s.createdAt
-        ? new Date(s.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-        : "",
-    }));
-
-    return rows.sort((a, b) => new Date(b.assignedAt).getTime() - new Date(a.assignedAt).getTime());
+    return rows;
   } catch (err) {
     console.error("[fetchAssignmentsAction]", err);
     return [];
@@ -173,16 +193,15 @@ export async function reassignApplicantHMAction(
       "Content-Type": "application/json",
     };
 
-    // Reassigning is mapped to giving the Hiring Manager access to the Candidate record
+    // Reassigning is mapped to giving the Hiring Manager access to the record (simulated as Account type)
     const res = await fetch("http://localhost:3000/api/v1/sharing/share", {
       method: "POST",
       headers,
       body: JSON.stringify({
-        resourceType: "Candidate",
-        resourceId: candidateId,
-        sharedToId: newHiringManagerId,
+        recordId: candidateId,
+        objectType: "Account",
+        targetUserId: newHiringManagerId,
         accessLevel: "EDIT",
-        cascadeToChildren: false,
       }),
     });
 
@@ -238,16 +257,15 @@ export async function assignJobAction(
       "Content-Type": "application/json",
     };
 
-    // Call sharing API to share this Job with the assigned user
+    // Call manual sharing API to share this Job with the assigned user
     const res = await fetch("http://localhost:3000/api/v1/sharing/share", {
       method: "POST",
       headers,
       body: JSON.stringify({
-        resourceType: "Job",
-        resourceId: input.jobId,
-        sharedToId: assignedToId,
+        recordId: input.jobId,
+        objectType: "Account",
+        targetUserId: assignedToId,
         accessLevel: "READ",
-        cascadeToChildren: true,
       }),
     });
 
@@ -276,31 +294,22 @@ export async function revokeAssignmentAction(
   }
 
   try {
+    const [jobId, targetUserId] = assignmentId.split("::");
+    if (!jobId || !targetUserId) throw new Error("Invalid assignment ID structure.");
+
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
       "Content-Type": "application/json",
     };
 
-    // 1. Fetch sharing rules to find this specific sharing rule details
-    const response = await fetch("http://localhost:3000/api/v1/sharing", {
-      headers: { Authorization: `Bearer ${session.accessToken}` },
-    });
-    if (!response.ok) throw new Error("Failed to retrieve share list.");
-    const shares = await response.json();
-    const s = shares.find((share: any) => share.id === assignmentId);
-
-    if (!s) throw new Error("Assignment record not found.");
-
-    // 2. Call unshare API
-    const revokeRes = await fetch("http://localhost:3000/api/v1/sharing/unshare", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        resourceType: s.resourceType,
-        resourceId: s.resourceId,
-        sharedToId: s.sharedToId,
-      }),
-    });
+    // Call DELETE sharing API
+    const revokeRes = await fetch(
+      `http://localhost:3000/api/v1/sharing/share?recordId=${jobId}&objectType=Account&targetUserId=${targetUserId}`,
+      {
+        method: "DELETE",
+        headers,
+      }
+    );
 
     if (!revokeRes.ok) {
       const errData = await revokeRes.json().catch(() => ({}));

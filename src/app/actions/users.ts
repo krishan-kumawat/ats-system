@@ -523,3 +523,34 @@ export async function assignUserPermissionSetsAction(
   }
 }
 
+export async function deleteUserAction(
+  userId: string
+): Promise<{ success?: boolean; error?: string; unauthorized?: boolean }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { unauthorized: true };
+  if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can delete users." };
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+    };
+    const res = await fetch(`http://localhost:3000/api/v1/users/${userId}`, {
+      method: "DELETE",
+      headers,
+    });
+
+    if (res.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || "Failed to delete user.");
+    }
+    revalidatePath("/");
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Failed to delete user." };
+  }
+}
+

@@ -8,6 +8,9 @@ export function middleware(request: NextRequest) {
   const isLoginPage = pathname === "/login";
 
   if (!session && !isLoginPage) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const loginUrl = new URL("/login", request.url);
     return NextResponse.redirect(loginUrl);
   }

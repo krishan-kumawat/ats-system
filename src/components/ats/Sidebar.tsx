@@ -3,11 +3,12 @@
 import { Role, Tab } from "@/lib/atsStore";
 import { UserRole } from "@/lib/enums";
 import { ROLE_META } from "@/lib/permissions";
+import { usePermissions } from "@/context/PermissionsContext";
 
 interface SidebarProps {
   role: Role;
   userRole: UserRole;
-  tab: Tab;
+  tab: string; // Changed to string to support dynamic tab strings
   candidateCount: number;
   jobCount: number;
   permissions: {
@@ -23,7 +24,7 @@ interface SidebarProps {
     canManagePermissions: boolean;
     canAssignJobs: boolean;
   };
-  onTabChange: (tab: Tab) => void;
+  onTabChange: (tab: any) => void;
   onToast: (title: string, msg: string, icon?: string) => void;
 }
 
@@ -37,6 +38,7 @@ export default function Sidebar({
   onTabChange,
   onToast,
 }: SidebarProps) {
+  const { navigationTabs, loading } = usePermissions();
   const isAdmin = userRole === UserRole.ADMIN;
   const roleMeta = ROLE_META[userRole] || {
     label: String(userRole),
@@ -73,103 +75,50 @@ export default function Sidebar({
             Navigation
           </div>
           <nav className="space-y-1">
+            {loading ? (
+              <div className="py-4 text-center text-xs text-slate-400">Loading tabs...</div>
+            ) : (
+              navigationTabs.map((tabItem) => {
+                let icon = "fa-solid fa-folder";
+                if (tabItem.iconName === "briefcase") icon = "fa-solid fa-briefcase";
+                else if (tabItem.iconName === "users") icon = "fa-solid fa-users";
+                else if (tabItem.iconName === "layers") icon = "fa-solid fa-layer-group";
+                else if (tabItem.iconName === "settings") icon = "fa-solid fa-users-gear";
+                else if (tabItem.iconName === "shield") icon = "fa-solid fa-user-shield";
+                else if (tabItem.iconName === "git-merge") icon = "fa-solid fa-network-wired";
+                else if (tabItem.iconName === "bar-chart-2") icon = "fa-solid fa-chart-line";
+                else if (tabItem.iconName === "file-text") icon = "fa-solid fa-shield-halved";
 
-            {/* Pipeline — visible if canViewCandidates */}
-            {permissions.canViewCandidates && (
-              <button onClick={() => onTabChange("pipeline")} className={tab === "pipeline" ? active : inactive}>
-                <span className="flex items-center gap-3">
-                  <i className="fa-solid fa-rectangle-list" />
-                  <span>Recruitment Board</span>
-                </span>
-                <span className="bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-bold">
-                  {candidateCount}
-                </span>
-              </button>
-            )}
+                const isTabActive =
+                  (tab || "").toLowerCase() === (tabItem.apiName || "").toLowerCase() ||
+                  (tab || "").toLowerCase() === `${(tabItem.apiName || "").toLowerCase()}s` ||
+                  (tabItem.apiName === "Candidate" && tab === "pipeline");
 
-            {/* Jobs — visible if canViewJobs */}
-            {permissions.canViewJobs && (
-              <button onClick={() => onTabChange("jobs")} className={tab === "jobs" ? active : inactive}>
-                <span className="flex items-center gap-3">
-                  <i className="fa-solid fa-briefcase" />
-                  <span>Job Requisitions</span>
-                </span>
-                <span className="bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-bold">
-                  {jobCount}
-                </span>
-              </button>
-            )}
-
-            {/* Applicants — visible if canViewCandidates */}
-            {permissions.canViewCandidates && (
-              <button onClick={() => onTabChange("applicants")} className={tab === "applicants" ? active : inactive}>
-                <span className="flex items-center gap-3">
-                  <i className="fa-solid fa-users" />
-                  <span>All Applicants</span>
-                </span>
-                <span className="bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-bold">
-                  {candidateCount}
-                </span>
-              </button>
-            )}
-
-            {/* Analytics — hidden if no permission */}
-            {permissions.canViewAnalytics && (
-              <button onClick={() => onTabChange("analytics")} className={tab === "analytics" ? active : inactive}>
-                <span className="flex items-center gap-3">
-                  <i className="fa-solid fa-chart-line" />
-                  <span>Talent ROI Analytics</span>
-                </span>
-              </button>
-            )}
-
-            {/* Audit log — hidden if no permission */}
-            {permissions.canViewAuditLog && (
-              <button onClick={() => onTabChange("audit")} className={tab === "audit" ? active : inactive}>
-                <span className="flex items-center gap-3">
-                  <i className="fa-solid fa-shield-halved" />
-                  <span>Security Audit Log</span>
-                </span>
-              </button>
-            )}
-
-            {/* Job Assignment — Admin only */}
-            {isAdmin && (
-              <button onClick={() => onTabChange("assignments")} className={tab === "assignments" ? active : inactive}>
-                <span className="flex items-center gap-3">
-                  <i className="fa-solid fa-user-tag" />
-                  <span>Job Assignments</span>
-                </span>
-                <span className="text-[9px] font-bold text-rose-500 dark:text-rose-400 bg-rose-50 dark:bg-rose-950 border border-rose-200 dark:border-rose-900 px-1.5 py-0.5 rounded-md">
-                  HR
-                </span>
-              </button>
-            )}
-
-            {/* Permission Manager — admin only */}
-            {isAdmin && (
-              <button onClick={() => onTabChange("permissions")} className={tab === "permissions" ? active : inactive}>
-                <span className="flex items-center gap-3">
-                  <i className="fa-solid fa-user-shield" />
-                  <span>Permission Manager</span>
-                </span>
-                <span className="text-[9px] font-bold text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-900 px-1.5 py-0.5 rounded-md">
-                  ADMIN
-                </span>
-              </button>
-            )}
-
-            {/* User Management — admin only */}
-            {isAdmin && (
-              <button onClick={() => onTabChange("users")} className={tab === "users" ? active : inactive}>
-                <span className="flex items-center gap-3">
-                  <i className="fa-solid fa-users-gear" />
-                  <span>User Management</span>
-                </span>
-                <span className="text-[9px] font-bold text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-900 px-1.5 py-0.5 rounded-md">
-                  ADMIN
-                </span>
-              </button>
+                return (
+                  <button
+                    key={tabItem.apiName}
+                    onClick={() => {
+                      window.location.href = tabItem.route;
+                    }}
+                    className={isTabActive ? active : inactive}
+                  >
+                    <span className="flex items-center gap-3">
+                      <i className={icon} />
+                      <span>{tabItem.label}</span>
+                    </span>
+                    {tabItem.apiName === "Job" && (
+                      <span className="bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-bold">
+                        {jobCount}
+                      </span>
+                    )}
+                    {tabItem.apiName === "Candidate" && (
+                      <span className="bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-bold">
+                        {candidateCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })
             )}
           </nav>
         </div>

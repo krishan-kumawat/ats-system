@@ -6,6 +6,8 @@ export const metadata: Metadata = {
   description: "Multi-Persona Internal Applicant Tracking System",
 };
 
+import { PermissionsProvider } from "@/context/PermissionsContext";
+
 export default function RootLayout({
   children,
 }: {
@@ -28,7 +30,9 @@ export default function RootLayout({
         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         suppressHydrationWarning
       >
-        {children}
+        <PermissionsProvider>
+          {children}
+        </PermissionsProvider>
       </body>
     </html>
   );
