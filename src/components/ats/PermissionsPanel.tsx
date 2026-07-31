@@ -261,7 +261,7 @@ export default function PermissionsPanel({
                       onClick={() => {
                         window.location.href = `/setup/profiles/${p.id}`;
                       }}
-                      className="text-indigo-655 hover:text-indigo-808 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline text-left font-bold focus:outline-none"
+                      className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline text-left font-bold focus:outline-none"
                     >
                       {p.name}
                     </button>

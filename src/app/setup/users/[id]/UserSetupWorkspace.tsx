@@ -210,7 +210,7 @@ export default function UserSetupWorkspace({
                 setDraftPsetIds(data.assignedPermissionSets.map((ps) => ps.id));
                 setShowPsetModal(true);
               }}
-              className="px-3 py-1.5 bg-indigo-655 hover:bg-indigo-700 text-white rounded text-[11px] font-semibold transition-colors"
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[11px] font-semibold transition-colors"
             >
               Edit Assignments
             </button>
@@ -259,7 +259,7 @@ export default function UserSetupWorkspace({
                 setDraftGroupIds(data.assignedGroups.map((g) => g.id));
                 setShowGroupModal(true);
               }}
-              className="px-3 py-1.5 bg-indigo-655 hover:bg-indigo-700 text-white rounded text-[11px] font-semibold transition-colors"
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[11px] font-semibold transition-colors"
             >
               Edit Group Membership
             </button>

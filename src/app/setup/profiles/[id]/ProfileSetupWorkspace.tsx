@@ -185,6 +185,7 @@ export default function ProfileSetupWorkspace({
   };
 
   const profile = initialData.profile;
+  const isEditable = profile.isCustom === true || profile.is_custom === true;
 
   return (
     <div className="space-y-6">
@@ -219,7 +220,7 @@ export default function ProfileSetupWorkspace({
             </div>
             <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
               {profile.name}
-              {profile.isCustom ? (
+              {(profile.isCustom || profile.is_custom) ? (
                 <span className="bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-900 text-[10px] px-2 py-0.5 rounded-full font-bold">
                   Custom
                 </span>
@@ -312,7 +313,8 @@ export default function ProfileSetupWorkspace({
                       onChange={() =>
                         setSysPerms((prev) => ({ ...prev, [item.key]: !prev[item.key] }))
                       }
-                      className="mt-1 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      disabled={!isEditable}
+                      className="mt-1 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
                     />
                     <div>
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
@@ -323,16 +325,18 @@ export default function ProfileSetupWorkspace({
                   </label>
                 ))}
               </div>
-              <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
-                <button
-                  onClick={handleSaveSystem}
-                  disabled={loading}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded font-semibold disabled:opacity-40 flex items-center gap-1.5 transition-colors"
-                >
-                  {loading && <i className="fa-solid fa-spinner animate-spin" />}
-                  Save System Permissions
-                </button>
-              </div>
+              {isEditable && (
+                <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
+                  <button
+                    onClick={handleSaveSystem}
+                    disabled={loading}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded font-semibold disabled:opacity-40 flex items-center gap-1.5 transition-colors"
+                  >
+                    {loading && <i className="fa-solid fa-spinner animate-spin" />}
+                    Save System Permissions
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -369,7 +373,8 @@ export default function ProfileSetupWorkspace({
                                   type="checkbox"
                                   checked={row[field] || false}
                                   onChange={() => handleToggleOls(obj.id, field)}
-                                  className="rounded border-slate-350 text-indigo-600 focus:ring-indigo-500"
+                                  disabled={!isEditable}
+                                  className="rounded border-slate-350 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
                                 />
                               </td>
                             )
@@ -380,16 +385,18 @@ export default function ProfileSetupWorkspace({
                   </tbody>
                 </table>
               </div>
-              <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
-                <button
-                  onClick={handleSaveOls}
-                  disabled={loading}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded font-semibold disabled:opacity-40 flex items-center gap-1.5 transition-colors"
-                >
-                  {loading && <i className="fa-solid fa-spinner animate-spin" />}
-                  Save Object Permissions
-                </button>
-              </div>
+              {isEditable && (
+                <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
+                  <button
+                    onClick={handleSaveOls}
+                    disabled={loading}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded font-semibold disabled:opacity-40 flex items-center gap-1.5 transition-colors"
+                  >
+                    {loading && <i className="fa-solid fa-spinner animate-spin" />}
+                    Save Object Permissions
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -456,7 +463,8 @@ export default function ProfileSetupWorkspace({
                                       type="checkbox"
                                       checked={perms.allowRead}
                                       onChange={() => handleToggleFls(f.id, "allowRead")}
-                                      className="rounded border-slate-350 text-indigo-600 focus:ring-indigo-500"
+                                      disabled={!isEditable}
+                                      className="rounded border-slate-350 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
                                     />
                                   </td>
                                   <td className="px-4 py-3 text-center">
@@ -464,7 +472,8 @@ export default function ProfileSetupWorkspace({
                                       type="checkbox"
                                       checked={perms.allowEdit}
                                       onChange={() => handleToggleFls(f.id, "allowEdit")}
-                                      className="rounded border-slate-350 text-indigo-600 focus:ring-indigo-500"
+                                      disabled={!isEditable}
+                                      className="rounded border-slate-350 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
                                     />
                                   </td>
                                 </tr>
@@ -474,16 +483,18 @@ export default function ProfileSetupWorkspace({
                         </tbody>
                       </table>
                     </div>
-                    <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800 mt-4">
-                      <button
-                        onClick={handleSaveFls}
-                        disabled={loading}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded font-semibold disabled:opacity-40 flex items-center gap-1.5 transition-colors"
-                      >
-                        {loading && <i className="fa-solid fa-spinner animate-spin" />}
-                        Save Field Permissions
-                      </button>
-                    </div>
+                    {isEditable && (
+                      <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800 mt-4">
+                        <button
+                          onClick={handleSaveFls}
+                          disabled={loading}
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded font-semibold disabled:opacity-40 flex items-center gap-1.5 transition-colors"
+                        >
+                          {loading && <i className="fa-solid fa-spinner animate-spin" />}
+                          Save Field Permissions
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )
               ) : (
@@ -507,13 +518,15 @@ export default function ProfileSetupWorkspace({
                     Configure visibility switches and sort order overrides. Lower sort precedence order values appear first in the sidebar.
                   </p>
                 </div>
-                <button
-                  onClick={handleSaveTabSettings}
-                  disabled={loading}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white rounded text-xs font-semibold shadow-md shadow-indigo-600/10 transition-all"
-                >
-                  {loading ? "Saving..." : "Save Tab Settings"}
-                </button>
+                {isEditable && (
+                  <button
+                    onClick={handleSaveTabSettings}
+                    disabled={loading}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white rounded text-xs font-semibold shadow-md shadow-indigo-600/10 transition-all"
+                  >
+                    {loading ? "Saving..." : "Save Tab Settings"}
+                  </button>
+                )}
               </div>
 
               <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-lg">
@@ -546,7 +559,8 @@ export default function ProfileSetupWorkspace({
                                 )
                               )
                             }
-                            className="rounded border-slate-350 text-indigo-600 focus:ring-indigo-500"
+                            disabled={!isEditable}
+                            className="rounded border-slate-350 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
                           />
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -566,7 +580,8 @@ export default function ProfileSetupWorkspace({
                                 )
                               );
                             }}
-                            className="w-24 px-2 py-1 border border-slate-250 dark:border-slate-800 rounded bg-slate-50 dark:bg-slate-950 text-center font-bold"
+                            disabled={!isEditable}
+                            className="w-24 px-2 py-1 border border-slate-250 dark:border-slate-800 rounded bg-slate-50 dark:bg-slate-950 text-center font-bold disabled:opacity-50"
                           />
                         </td>
                       </tr>

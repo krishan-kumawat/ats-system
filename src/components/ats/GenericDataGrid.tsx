@@ -8,9 +8,10 @@ import { deleteUserAction } from "@/app/actions/users";
 
 interface GenericDataGridProps {
   objectApiName: string;
+  onRowClick?: (id: string) => void;
 }
 
-export default function GenericDataGrid({ objectApiName }: GenericDataGridProps) {
+export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDataGridProps) {
   const { fetchMetadata } = usePermissions();
   const [metadata, setMetadata] = useState<ObjectMetadata | null>(null);
   const [records, setRecords] = useState<any[]>([]);
@@ -71,8 +72,14 @@ export default function GenericDataGrid({ objectApiName }: GenericDataGridProps)
       try {
         const res = await fetchObjectRecordsAction(objectApiName, page, limit, search);
         if (!active) return;
-        setRecords(res.data);
-        setTotal(res.total);
+        let data = res.data;
+        let total = res.total;
+        if (search && objectApiName === "Job") {
+          data = data.filter((r: any) => r.title && r.title.toLowerCase().includes(search.toLowerCase()));
+          total = data.length;
+        }
+        setRecords(data);
+        setTotal(total);
       } catch (err: any) {
         setError(err.message || "Failed to load records.");
       } finally {
@@ -86,7 +93,7 @@ export default function GenericDataGrid({ objectApiName }: GenericDataGridProps)
     };
   }, [objectApiName, page, limit, search]);
 
-  if (loading) {
+  if (loading && !metadata) {
     return (
       <div className="flex flex-col items-center justify-center h-96 space-y-4">
         <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
@@ -140,14 +147,14 @@ export default function GenericDataGrid({ objectApiName }: GenericDataGridProps)
 
       {/* Search & Pagination Limit Toolbar */}
       <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-4 rounded-xl shadow-sm">
-        {objectApiName === "User" ? (
+        {objectApiName === "User" || objectApiName === "Job" ? (
           <div className="relative flex-1 max-w-md">
             <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
               <i className="fa-solid fa-magnifying-glass text-xs" />
             </span>
             <input
               type="text"
-              placeholder="Search users by email..."
+              placeholder={objectApiName === "Job" ? "Search jobs by title..." : "Search users by email..."}
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -178,7 +185,7 @@ export default function GenericDataGrid({ objectApiName }: GenericDataGridProps)
       </div>
 
       {/* Grid Table */}
-      <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
+      <div className={`bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm ${loading ? "opacity-60 pointer-events-none transition-opacity" : "transition-opacity"}`}>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -223,7 +230,9 @@ export default function GenericDataGrid({ objectApiName }: GenericDataGridProps)
 
                       const isLink =
                         (objectApiName === "Profile" && field.apiName === "name") ||
-                        (objectApiName === "User" && field.apiName === "email");
+                        (objectApiName === "User" && field.apiName === "email") ||
+                        (objectApiName === "Job" && field.apiName === "title") ||
+                        (objectApiName === "Candidate" && field.apiName === "name");
 
                       const isProfileLink =
                         objectApiName === "User" && field.apiName === "profile";
@@ -231,16 +240,25 @@ export default function GenericDataGrid({ objectApiName }: GenericDataGridProps)
                       return (
                         <td key={field.apiName} className="px-6 py-4.5 font-medium text-slate-700 dark:text-slate-350">
                           {isLink ? (
-                            <a
-                              href={
-                                objectApiName === "Profile"
-                                  ? `/setup/profiles/${record.id}`
-                                  : `/setup/users/${record.id}`
-                              }
-                              className="text-indigo-650 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-bold hover:underline"
-                            >
-                              {val !== undefined && val !== null ? String(val) : "-"}
-                            </a>
+                            onRowClick ? (
+                              <button
+                                onClick={() => onRowClick(record.id)}
+                                className="text-indigo-650 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-bold hover:underline text-left focus:outline-none"
+                              >
+                                {val !== undefined && val !== null ? String(val) : "-"}
+                              </button>
+                            ) : (
+                              <a
+                                href={
+                                  objectApiName === "Profile"
+                                    ? `/setup/profiles/${record.id}`
+                                    : `/setup/users/${record.id}`
+                                }
+                                className="text-indigo-650 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-bold hover:underline"
+                              >
+                                {val !== undefined && val !== null ? String(val) : "-"}
+                              </a>
+                            )
                           ) : isProfileLink ? (
                             <a
                               href={`/setup/profiles/${record.profile?.id}`}
@@ -255,10 +273,10 @@ export default function GenericDataGrid({ objectApiName }: GenericDataGridProps)
                       );
                     })}
 
-                    {/* Actions column based on OLS */}
+                    {/* Actions column based on OLS and record-level sharing access */}
                     {(metadata.ols.allowEdit || metadata.ols.allowDelete) && (
                       <td className="px-6 py-4.5 text-right space-x-3">
-                        {metadata.ols.allowEdit && (
+                        {metadata.ols.allowEdit && record.userRecordAccess?.isEditable !== false && (
                           <button
                             onClick={() => handleEdit(record.id)}
                             className="text-indigo-650 hover:text-indigo-750 dark:text-indigo-400 dark:hover:text-indigo-300 text-xs font-bold hover:underline"
@@ -266,7 +284,7 @@ export default function GenericDataGrid({ objectApiName }: GenericDataGridProps)
                             Edit
                           </button>
                         )}
-                        {metadata.ols.allowDelete && (
+                        {metadata.ols.allowDelete && record.userRecordAccess?.isDeletable !== false && (
                           <button
                             onClick={() => handleDelete(record.id)}
                             className="text-rose-605 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 text-xs font-bold hover:underline"

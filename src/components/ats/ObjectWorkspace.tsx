@@ -11,6 +11,8 @@ import GenericDataGrid from "@/components/ats/GenericDataGrid";
 import PermissionsPanel from "@/components/ats/PermissionsPanel";
 import AddCandidateModal from "@/components/ats/AddCandidateModal";
 import EvaluationWorkspace from "@/components/ats/EvaluationWorkspace";
+import JobRecordPage from "@/components/ats/JobRecordPage";
+import UserRecordPage from "@/components/ats/UserRecordPage";
 import { UserRole } from "@/lib/enums";
 import { SessionPayload } from "@/lib/auth-config";
 import { Job, Candidate, AuditEntry } from "@/lib/atsStore";
@@ -66,6 +68,8 @@ export default function ObjectWorkspace({
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>(initialData.auditLogs);
   const [showAddModal, setShowAddModal] = useState(false);
   const [activeCandidateId, setActiveCandidateId] = useState<string | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   const toastTimer = useRef<NodeJS.Timeout | null>(null);
   const isFounder = role === "founder" && user.role === UserRole.ADMIN;
@@ -224,13 +228,33 @@ export default function ObjectWorkspace({
         onMoveStage={handleMoveStage}
       />
     ),
-    Job: (
-      <JobsPanel
+    Job: selectedJobId ? (
+      <JobRecordPage
+        jobId={selectedJobId}
         jobs={jobs}
         candidates={candidates}
-        canAddJob={myPerms.canAddJob}
-        onJobAdd={handleJobAdd}
+        auditLogs={auditLogs}
+        role={role}
+        onBack={() => setSelectedJobId(null)}
         onToast={showToast}
+      />
+    ) : (
+      <GenericDataGrid
+        objectApiName="Job"
+        onRowClick={(id) => setSelectedJobId(id)}
+      />
+    ),
+    User: selectedUserId ? (
+      <UserRecordPage
+        userId={selectedUserId}
+        auditLogs={auditLogs}
+        onBack={() => setSelectedUserId(null)}
+        onToast={showToast}
+      />
+    ) : (
+      <GenericDataGrid
+        objectApiName="User"
+        onRowClick={(id) => setSelectedUserId(id)}
       />
     ),
     Analytics: (
@@ -246,6 +270,11 @@ export default function ObjectWorkspace({
       />
     ),
   };
+
+  React.useEffect(() => {
+    setSelectedJobId(null);
+    setSelectedUserId(null);
+  }, [normName]);
 
   const currentComponent = CUSTOM_COMPONENTS[normName] || (
     <GenericDataGrid objectApiName={normName} />
