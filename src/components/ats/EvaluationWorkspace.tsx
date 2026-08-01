@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { Candidate, Role, AuditEntry, Recommendation } from "@/lib/atsStore";
+import { fetchCandidateDetailsAction } from "@/app/actions/data";
 
 interface EvaluationWorkspaceProps {
   candidate: Candidate;
@@ -38,6 +39,9 @@ export default function EvaluationWorkspace({
     candidate.scorecard.recommendation
   );
 
+  const [fullCandidate, setFullCandidate] = useState<any | null>(null);
+  const [fullCandLoading, setFullCandLoading] = useState(true);
+
   useEffect(() => {
     setTechScore(candidate.scorecard.technicalScore || 1);
     setSysScore(candidate.scorecard.systemScore || 1);
@@ -45,6 +49,17 @@ export default function EvaluationWorkspace({
     setPros(candidate.scorecard.pros);
     setCons(candidate.scorecard.cons);
     setRecommendation(candidate.scorecard.recommendation);
+
+    const candUuid = candidate.id.split("::")[0];
+    fetchCandidateDetailsAction(candUuid)
+      .then((res) => {
+        setFullCandidate(res);
+        setFullCandLoading(false);
+      })
+      .catch((err) => {
+        console.error("Error fetching full candidate details", err);
+        setFullCandLoading(false);
+      });
   }, [candidate.id]);
 
   function saveScorecard() {
@@ -402,6 +417,40 @@ export default function EvaluationWorkspace({
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* System Information */}
+          <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-900/50 text-xs mt-4">
+            <h4 className="font-bold text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-1.5 uppercase tracking-wider text-[10px]">
+              <i className="fa-solid fa-circle-info text-indigo-500" />
+              System Information
+            </h4>
+            <div className="space-y-2">
+              <div className="flex justify-between border-b border-slate-100 dark:border-slate-900 pb-1.5">
+                <span className="text-slate-400 dark:text-slate-500 font-medium">Owner</span>
+                <span className="font-semibold text-slate-850 dark:text-slate-100">
+                  {fullCandidate?.owner ? `${fullCandidate.owner.firstName} ${fullCandidate.owner.lastName}` : "System Owner"}
+                </span>
+              </div>
+              <div className="flex justify-between border-b border-slate-100 dark:border-slate-900 pb-1.5">
+                <span className="text-slate-400 dark:text-slate-500 font-medium">Created By</span>
+                <span className="font-semibold text-slate-850 dark:text-slate-100 text-right">
+                  {fullCandidate?.createdBy ? `${fullCandidate.createdBy.firstName} ${fullCandidate.createdBy.lastName}` : "System"} <br/>
+                  <span className="text-[10px] text-slate-400">
+                    {fullCandidate?.createdDate ? new Date(fullCandidate.createdDate).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "N/A"}
+                  </span>
+                </span>
+              </div>
+              <div className="flex justify-between pb-0.5">
+                <span className="text-slate-400 dark:text-slate-500 font-medium">Last Modified By</span>
+                <span className="font-semibold text-slate-850 dark:text-slate-100 text-right">
+                  {fullCandidate?.lastModifiedBy ? `${fullCandidate.lastModifiedBy.firstName} ${fullCandidate.lastModifiedBy.lastName}` : "System"} <br/>
+                  <span className="text-[10px] text-slate-400">
+                    {fullCandidate?.lastModifiedDate ? new Date(fullCandidate.lastModifiedDate).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "N/A"}
+                  </span>
+                </span>
+              </div>
             </div>
           </div>
 

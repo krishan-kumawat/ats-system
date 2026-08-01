@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 
 export interface NavigationTab {
   apiName: string;
@@ -92,9 +93,11 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     }
   };
 
+  const pathname = usePathname();
+
   useEffect(() => {
     refreshNavigation();
-  }, []);
+  }, [pathname]);
 
   return (
     <PermissionsContext.Provider

@@ -2,14 +2,25 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Job, JobStatus, AuditEntry } from "@/lib/atsStore";
-import { createJobAction } from "@/app/actions/jobs";
+import { createJobAction, updateJobAction } from "@/app/actions/jobs";
 import { fetchHiringManagerUsersAction, UserOption } from "@/app/actions/assignments";
 import { ROLE_META } from "@/lib/permissions";
+import { UserRole } from "@/lib/enums";
 
 interface AddJobModalProps {
   onClose: () => void;
   onSave: (job: Job, audit: AuditEntry) => void;
   onToast: (title: string, msg: string, icon?: string) => void;
+  mode?: "create" | "edit" | "clone";
+  jobId?: string;
+  initialValues?: {
+    title: string;
+    department: string;
+    status: JobStatus;
+    budget: string;
+    hiringManagerName?: string;
+    hiringManagerId?: string;
+  };
 }
 
 const DEPARTMENTS = ["Engineering", "Product", "Design", "Data", "Marketing", "Operations", "Finance", "HR"];
@@ -19,27 +30,59 @@ const STATUS_OPTIONS: { value: JobStatus; label: string }[] = [
   { value: "ON_HOLD", label: "On Hold" },
 ];
 
-export default function AddJobModal({ onClose, onSave, onToast }: AddJobModalProps) {
-  const [title, setTitle]               = useState("");
-  const [department, setDepartment]     = useState(DEPARTMENTS[0]);
-  const [status, setStatus]             = useState<JobStatus>("OPEN");
-  const [budget, setBudget]             = useState("");
+export default function AddJobModal({
+  onClose,
+  onSave,
+  onToast,
+  mode = "create",
+  jobId,
+  initialValues,
+}: AddJobModalProps) {
+  const [title, setTitle]               = useState(initialValues?.title || "");
+  const [department, setDepartment]     = useState(initialValues?.department || DEPARTMENTS[0]);
+  const [status, setStatus]             = useState<JobStatus>(initialValues?.status || "OPEN");
+  const [budget, setBudget]             = useState(initialValues?.budget || "");
   const [saving, setSaving]             = useState(false);
 
   // Combobox state
   const [hmUsers, setHmUsers]           = useState<UserOption[]>([]);
   const [loadingHM, setLoadingHM]       = useState(true);
-  const [hmQuery, setHmQuery]           = useState("");
+  const [hmQuery, setHmQuery]           = useState(initialValues?.hiringManagerName || "");
   const [hmOpen, setHmOpen]             = useState(false);
-  const [selectedHM, setSelectedHM]     = useState<UserOption | null>(null);
+  const [selectedHM, setSelectedHM]     = useState<UserOption | null>(
+    initialValues?.hiringManagerId && initialValues?.hiringManagerName
+      ? { id: initialValues.hiringManagerId, name: initialValues.hiringManagerName, email: "", role: UserRole.HIRING_MANAGER }
+      : null
+  );
   const comboRef                        = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchHiringManagerUsersAction().then((users) => {
       setHmUsers(users);
       setLoadingHM(false);
+      if (initialValues?.hiringManagerName && !selectedHM) {
+        const matched = users.find(
+          (u) => u.name.toLowerCase() === initialValues.hiringManagerName?.toLowerCase()
+        );
+        if (matched) {
+          setSelectedHM(matched);
+          setHmQuery(matched.name);
+        }
+      }
     });
-  }, []);
+  }, [initialValues?.hiringManagerName]);
+
+  useEffect(() => {
+    if (initialValues?.hiringManagerId && initialValues?.hiringManagerName && !selectedHM) {
+      setSelectedHM({
+        id: initialValues.hiringManagerId,
+        name: initialValues.hiringManagerName,
+        email: "",
+        role: UserRole.HIRING_MANAGER,
+      });
+      setHmQuery(initialValues.hiringManagerName);
+    }
+  }, [initialValues?.hiringManagerId, initialValues?.hiringManagerName]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -75,34 +118,65 @@ export default function AddJobModal({ onClose, onSave, onToast }: AddJobModalPro
 
     setSaving(true);
 
-    const result = await createJobAction({
-      title: title.trim(),
-      department,
-      hiringManager: selectedHM.name,
-      hiringManagerId: selectedHM.id,
-      status,
-      budgetLimit: parseInt(budget) || 120000,
-    });
+    if (mode === "edit") {
+      const result = await updateJobAction(jobId!, {
+        title: title.trim(),
+        department,
+        hiringManager: selectedHM.name,
+        hiringManagerId: selectedHM.id,
+        status,
+        budgetLimit: parseInt(budget) || 120000,
+      });
 
-    if (result.error) {
-      onToast("Error", result.error, "ban");
+      if (result.error) {
+        onToast("Error", result.error, "ban");
+        setSaving(false);
+        return;
+      }
+
+      const job = result.job!;
+      const audit: AuditEntry = {
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        user: "System",
+        action: "EDITED_JOB",
+        target: `${job.id} (${job.title})`,
+        notes: `Job requisition updated. Department: ${department}. HM: ${selectedHM.name}. Budget: $${(parseInt(budget) || 120000).toLocaleString("en-US")}.`,
+      };
+
+      onSave(job, audit);
+      onToast("Job Updated", `"${title.trim()}" has been updated.`, "briefcase");
       setSaving(false);
-      return;
+      onClose();
+    } else {
+      const result = await createJobAction({
+        title: title.trim(),
+        department,
+        hiringManager: selectedHM.name,
+        hiringManagerId: selectedHM.id,
+        status,
+        budgetLimit: parseInt(budget) || 120000,
+      });
+
+      if (result.error) {
+        onToast("Error", result.error, "ban");
+        setSaving(false);
+        return;
+      }
+
+      const job = result.job;
+      const audit: AuditEntry = {
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        user: "System",
+        action: "CREATED_JOB",
+        target: `${job.id} (${job.title})`,
+        notes: `Job requisition created. Department: ${department}. HM: ${selectedHM.name}. Budget: $${(parseInt(budget) || 120000).toLocaleString("en-US")}.`,
+      };
+
+      onSave(job, audit);
+      onToast("Job Created", `"${title.trim()}" has been added to active requisitions.`, "briefcase");
+      setSaving(false);
+      onClose();
     }
-
-    const job = result.job;
-    const audit: AuditEntry = {
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      user: "System",
-      action: "CREATED_JOB",
-      target: `${job.id} (${job.title})`,
-      notes: `Job requisition created. Department: ${department}. HM: ${selectedHM.name}. Budget: $${(parseInt(budget) || 120000).toLocaleString("en-US")}.`,
-    };
-
-    onSave(job, audit);
-    onToast("Job Created", `"${title.trim()}" has been added to active requisitions.`, "briefcase");
-    setSaving(false);
-    onClose();
   }
 
   return (
@@ -115,7 +189,9 @@ export default function AddJobModal({ onClose, onSave, onToast }: AddJobModalPro
             <div className="w-7 h-7 rounded-lg bg-indigo-600/10 dark:bg-indigo-500/20 flex items-center justify-center">
               <i className="fa-solid fa-briefcase text-indigo-600 dark:text-indigo-400 text-sm" />
             </div>
-            <h3 className="font-bold text-slate-800 dark:text-slate-200">Create New Job Requisition</h3>
+            <h3 className="font-bold text-slate-800 dark:text-slate-200">
+              {mode === "edit" ? "Edit Job Requisition" : mode === "clone" ? "Clone Job Requisition" : "Create New Job Requisition"}
+            </h3>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
             <i className="fa-solid fa-xmark" />
@@ -292,6 +368,10 @@ export default function AddJobModal({ onClose, onSave, onToast }: AddJobModalPro
           >
             {saving ? (
               <><i className="fa-solid fa-circle-notch fa-spin" /><span>Saving…</span></>
+            ) : mode === "edit" ? (
+              <><i className="fa-solid fa-floppy-disk" /><span>Save Job</span></>
+            ) : mode === "clone" ? (
+              <><i className="fa-solid fa-copy" /><span>Clone Requisition</span></>
             ) : (
               <><i className="fa-solid fa-plus" /><span>Create Requisition</span></>
             )}

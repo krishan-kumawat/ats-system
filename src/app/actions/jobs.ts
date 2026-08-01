@@ -96,3 +96,95 @@ export async function createJobAction(input: CreateJobInput): Promise<{ job: Job
     return { job: {} as Job, error: "Failed to create job requisition. Please try again." };
   }
 }
+
+export async function updateJobAction(jobId: string, input: CreateJobInput): Promise<{ job?: Job; error?: string }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { error: "Unauthorized" };
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
+
+    // 1. Resolve or Create Department on Backend
+    const deptRes = await fetch("http://localhost:3000/api/v1/departments", {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    const departments = deptRes.ok ? await deptRes.json() : [];
+    let dept = departments.find(
+      (d: any) => d.name.toLowerCase() === input.department.toLowerCase()
+    );
+
+    if (!dept && input.department.trim()) {
+      const code = input.department.trim().toUpperCase().replace(/[\s_-]+/g, "_");
+      const createDeptRes = await fetch("http://localhost:3000/api/v1/departments", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ name: input.department.trim(), code }),
+      });
+      if (createDeptRes.ok) {
+        dept = await createDeptRes.json();
+      }
+    }
+
+    const targetStatus = input.status === "OPEN" ? "Open" : input.status === "CLOSED" ? "Closed" : "Draft";
+
+    // 2. Update Job on Backend
+    const res = await fetch(`http://localhost:3000/api/v1/jobs/${jobId}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({
+        title: input.title,
+        status: targetStatus,
+        departmentId: dept?.id || null,
+      }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      return { error: errData.message || "Failed to update job requisition." };
+    }
+
+    const updatedJob = await res.json();
+    revalidatePath("/");
+
+    return {
+      job: {
+        id: updatedJob.id,
+        title: updatedJob.title,
+        department: dept?.name || input.department,
+        hiringManager: input.hiringManager,
+        status: updatedJob.status.toUpperCase() as unknown as JobStatus,
+        budgetLimit: input.budgetLimit,
+        createdAt: updatedJob.createdAt ? String(updatedJob.createdAt).slice(0, 10) : "",
+      },
+    };
+  } catch (err: any) {
+    console.error("[updateJobAction]", err);
+    return { error: err.message || "Failed to update job requisition." };
+  }
+}
+
+export async function deleteJobAction(jobId: string): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { success: false, error: "Unauthorized" };
+
+  try {
+    const res = await fetch(`http://localhost:3000/api/v1/jobs/${jobId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      return { success: false, error: errData.message || "Failed to delete job requisition." };
+    }
+
+    revalidatePath("/");
+    return { success: true };
+  } catch (err: any) {
+    console.error("[deleteJobAction]", err);
+    return { success: false, error: err.message || "Failed to delete job requisition." };
+  }
+}

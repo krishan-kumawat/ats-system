@@ -285,3 +285,43 @@ export async function fetchObjectRecordsAction(objectApiName: string, page = 1, 
     throw err;
   }
 }
+
+export async function fetchJobDetailsAction(jobId: string) {
+  const session = await getSession();
+  if (!session || !session.accessToken) {
+    throw new Error("Unauthorized");
+  }
+  const res = await fetch(`http://localhost:3000/api/v1/jobs/${jobId}`, {
+    headers: { Authorization: `Bearer ${session.accessToken}` },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let msg = `Failed to fetch job details: ${res.status} ${res.statusText}`;
+    try {
+      const errJson = await res.json();
+      msg = errJson.message || msg;
+    } catch (_) {}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+export async function fetchCandidateDetailsAction(candidateId: string) {
+  const session = await getSession();
+  if (!session || !session.accessToken) {
+    throw new Error("Unauthorized");
+  }
+  const res = await fetch(`http://localhost:3000/api/v1/candidates/${candidateId}`, {
+    headers: { Authorization: `Bearer ${session.accessToken}` },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let msg = `Failed to fetch candidate details: ${res.status} ${res.statusText}`;
+    try {
+      const errJson = await res.json();
+      msg = errJson.message || msg;
+    } catch (_) {}
+    throw new Error(msg);
+  }
+  return res.json();
+}

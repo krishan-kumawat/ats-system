@@ -203,6 +203,28 @@ export default function UserRecordPage({
                     <p className="font-semibold font-mono text-slate-500 dark:text-slate-400 mt-1">{user.id}</p>
                   </div>
                 </div>
+
+                {/* System Information */}
+                <div className="pt-6 border-t border-slate-200 dark:border-slate-800 mt-6">
+                  <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                    <i className="fa-solid fa-circle-info text-indigo-500" />
+                    System Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                    <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
+                      <span className="text-slate-400 dark:text-slate-500 font-medium">Created By</span>
+                      <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">
+                        {user.createdByName || "System"} ({user.createdDate ? new Date(user.createdDate).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "N/A"})
+                      </p>
+                    </div>
+                    <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
+                      <span className="text-slate-400 dark:text-slate-500 font-medium">Last Modified By</span>
+                      <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">
+                        {user.lastModifiedByName || "System"} ({user.lastModifiedDate ? new Date(user.lastModifiedDate).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "N/A"})
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { AuditEntry } from "@/lib/atsStore";
+import { AuditEntry, JobStatus } from "@/lib/atsStore";
 import {
   fetchRecordAccessAction,
   fetchCollaboratorsAction,
@@ -7,6 +7,9 @@ import {
   removeManualShareAction,
 } from "@/app/actions/sharing";
 import { fetchAssignableUsersAction } from "@/app/actions/assignments";
+import { fetchJobDetailsAction } from "@/app/actions/data";
+import { deleteJobAction } from "@/app/actions/jobs";
+import AddJobModal from "@/components/ats/AddJobModal";
 
 interface JobRecordPageProps {
   jobId: string;
@@ -16,8 +19,9 @@ interface JobRecordPageProps {
   role: "founder" | "recruiter";
   onBack: () => void;
   onToast: (title: string, msg: string, icon?: string) => void;
-  onEdit?: (jobId: string) => void;
-  onDelete?: (jobId: string) => void;
+  onJobUpdate?: (job: any, audit: AuditEntry) => void;
+  onJobDelete?: (jobId: string) => void;
+  onJobClone?: (job: any, audit: AuditEntry) => void;
 }
 
 export default function JobRecordPage({
@@ -28,6 +32,9 @@ export default function JobRecordPage({
   role,
   onBack,
   onToast,
+  onJobUpdate,
+  onJobDelete,
+  onJobClone,
 }: JobRecordPageProps) {
   const [activeSubTab, setActiveSubTab] = useState<"details" | "related">("details");
 
@@ -40,10 +47,41 @@ export default function JobRecordPage({
   const [sharingLoading, setSharingLoading] = useState(false);
   const [sharingError, setSharingError] = useState<string | null>(null);
 
+  const [fullJob, setFullJob] = useState<any | null>(null);
+  const [fullJobLoading, setFullJobLoading] = useState(true);
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showCloneModal, setShowCloneModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    if (!window.confirm("Are you sure you want to delete this job requisition?")) return;
+    setDeleting(true);
+    const result = await deleteJobAction(jobId);
+    if (!result.success) {
+      onToast("Error", result.error || "Failed to delete job.", "ban");
+      setDeleting(false);
+      return;
+    }
+    onToast("Job Deleted", "Job requisition removed from system.", "trash");
+    onJobDelete?.(jobId);
+    onBack();
+  }
+
   useEffect(() => {
     fetchRecordAccessAction(jobId, "Job")
       .then((res) => setAccess(res))
       .catch((err) => console.error("Error fetching record access", err));
+
+    fetchJobDetailsAction(jobId)
+      .then((res) => {
+        setFullJob(res);
+        setFullJobLoading(false);
+      })
+      .catch((err) => {
+        console.error("Error fetching job details", err);
+        setFullJobLoading(false);
+      });
   }, [jobId]);
 
   const handleOpenSharing = async () => {
@@ -160,21 +198,32 @@ export default function JobRecordPage({
             </button>
           )}
 
+          <button
+            onClick={() => setShowCloneModal(true)}
+            className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-805 text-slate-750 dark:text-slate-300 rounded text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5"
+          >
+            <i className="fa-solid fa-copy text-[10px]" />
+            Clone
+          </button>
+
           {access.isEditable && (
             <button
-              onClick={() => onToast("System Notice", "Job editing is active. Editing record...")}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold shadow-sm transition-colors"
+              onClick={() => setShowEditModal(true)}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5"
             >
+              <i className="fa-solid fa-pen text-[10px]" />
               Edit
             </button>
           )}
 
           {access.isDeletable && (
             <button
-              onClick={() => onToast("Delete Notice", "Job deleting is allowed.")}
-              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs font-semibold shadow-sm transition-colors"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white rounded text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5"
             >
-              Delete
+              <i className="fa-solid fa-trash text-[10px]" />
+              {deleting ? "Deleting..." : "Delete"}
             </button>
           )}
         </div>
@@ -277,6 +326,34 @@ export default function JobRecordPage({
                   <p className="text-slate-700 dark:text-slate-350 mt-1.5 leading-relaxed bg-slate-50 dark:bg-slate-900/60 p-3 rounded border border-slate-100 dark:border-slate-800">
                     {job.description || `Responsible for designing, building, and deploying highly modular and scalable distributed application layers. Collaborates closely with product engineering teams to implement modern Salesforce OLS/FLS metadata controls.`}
                   </p>
+                </div>
+
+                {/* System Information */}
+                <div className="pt-6 border-t border-slate-200 dark:border-slate-800">
+                  <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                    <i className="fa-solid fa-circle-info text-indigo-500" />
+                    System Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                    <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
+                      <span className="text-slate-400 dark:text-slate-500 font-medium">Owner</span>
+                      <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">
+                        {fullJob?.owner ? `${fullJob.owner.firstName} ${fullJob.owner.lastName}` : job.hiringManager || "System Owner"}
+                      </p>
+                    </div>
+                    <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
+                      <span className="text-slate-400 dark:text-slate-500 font-medium">Created By</span>
+                      <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">
+                        {fullJob?.createdBy ? `${fullJob.createdBy.firstName} ${fullJob.createdBy.lastName}` : "System"} ({fullJob?.createdDate ? new Date(fullJob.createdDate).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : (job.createdAt ? new Date(job.createdAt).toLocaleDateString() : "N/A")})
+                      </p>
+                    </div>
+                    <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
+                      <span className="text-slate-400 dark:text-slate-500 font-medium">Last Modified By</span>
+                      <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">
+                        {fullJob?.lastModifiedBy ? `${fullJob.lastModifiedBy.firstName} ${fullJob.lastModifiedBy.lastName}` : "System"} ({fullJob?.lastModifiedDate ? new Date(fullJob.lastModifiedDate).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "N/A"})
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -499,6 +576,49 @@ export default function JobRecordPage({
         </div>
       )}
 
+      {showEditModal && (
+        <AddJobModal
+          mode="edit"
+          jobId={jobId}
+          initialValues={{
+            title: job.title,
+            department: job.department?.name || job.department || "Engineering",
+            status: (job.status || "OPEN").toUpperCase() as unknown as JobStatus,
+            budget: String(job.budgetLimit || ""),
+            hiringManagerName: fullJob?.owner ? `${fullJob.owner.firstName} ${fullJob.owner.lastName}` : job.hiringManager || "",
+            hiringManagerId: fullJob?.ownerId || "",
+          }}
+          onClose={() => setShowEditModal(false)}
+          onSave={handleEditSave}
+          onToast={onToast}
+        />
+      )}
+
+      {showCloneModal && (
+        <AddJobModal
+          mode="clone"
+          initialValues={{
+            title: `Clone of ${job.title}`,
+            department: job.department?.name || job.department || "Engineering",
+            status: (job.status || "OPEN").toUpperCase() as unknown as JobStatus,
+            budget: String(job.budgetLimit || ""),
+            hiringManagerName: fullJob?.owner ? `${fullJob.owner.firstName} ${fullJob.owner.lastName}` : job.hiringManager || "",
+            hiringManagerId: fullJob?.ownerId || "",
+          }}
+          onClose={() => setShowCloneModal(false)}
+          onSave={handleCloneSave}
+          onToast={onToast}
+        />
+      )}
     </div>
   );
+
+  function handleEditSave(updatedJob: any, audit: AuditEntry) {
+    setFullJob(updatedJob);
+    onJobUpdate?.(updatedJob, audit);
+  }
+
+  function handleCloneSave(clonedJob: any, audit: AuditEntry) {
+    onJobClone?.(clonedJob, audit);
+  }
 }

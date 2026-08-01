@@ -204,6 +204,21 @@ export default function ObjectWorkspace({
     setAuditLogs((prev) => [...prev, audit]);
   }
 
+  function handleJobUpdate(updatedJob: Job, audit: AuditEntry) {
+    setJobs((prev) => prev.map((j) => (j.id === updatedJob.id ? updatedJob : j)));
+    setAuditLogs((prev) => [...prev, audit]);
+  }
+
+  function handleJobDelete(jobId: string) {
+    setJobs((prev) => prev.filter((j) => j.id !== jobId));
+  }
+
+  function handleJobClone(clonedJob: Job, audit: AuditEntry) {
+    setJobs((prev) => [...prev, clonedJob]);
+    setAuditLogs((prev) => [...prev, audit]);
+    setSelectedJobId(clonedJob.id);
+  }
+
   const allocated = candidates.reduce(
     (acc, c) => acc + (c.proposedSalary || c.expectedSalary || 0),
     0
@@ -237,6 +252,9 @@ export default function ObjectWorkspace({
         role={role}
         onBack={() => setSelectedJobId(null)}
         onToast={showToast}
+        onJobUpdate={handleJobUpdate}
+        onJobDelete={handleJobDelete}
+        onJobClone={handleJobClone}
       />
     ) : (
       <GenericDataGrid
