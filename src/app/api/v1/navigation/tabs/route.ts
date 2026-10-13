@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { API_BASE_URL } from "@/lib/api";
+
 
 export async function GET() {
   const session = await getSession();
@@ -7,13 +9,15 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+
   try {
-    const res = await fetch("http://localhost:3000/api/v1/navigation/tabs", {
+    const res = await fetch(`${API_BASE_URL}/api/v1/navigation/tabs`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
       },
       cache: "no-store",
     });
+
 
     if (!res.ok) {
       if (res.status === 401) {
@@ -23,6 +27,7 @@ export async function GET() {
       return NextResponse.json({ error: "Failed to fetch from backend" }, { status: res.status });
     }
 
+
     const data = await res.json();
     return NextResponse.json(data);
   } catch (err: any) {
@@ -30,3 +35,6 @@ export async function GET() {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+
+

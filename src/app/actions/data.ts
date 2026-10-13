@@ -1,8 +1,10 @@
 "use server";
 
+
 import { UserRole, ApplicationStage, ApprovalStatus, Recommendation } from "@/lib/enums";
 import { Candidate, Job, AuditEntry, JobStatus, PipelineStage } from "@/lib/atsStore";
 import { getSession } from "@/lib/auth";
+import { API_BASE_URL } from "@/lib/api";
 import {
   RolePermissions,
   DEFAULT_ROLE_PERMISSIONS,
@@ -11,12 +13,14 @@ import {
   BACKEND_PERM_MAP,
 } from "@/lib/permissions";
 
+
 export interface InitialData {
   candidates: Candidate[];
   jobs: Job[];
   auditLogs: AuditEntry[];
   rolePermissions: RolePermissions;
 }
+
 
 export interface Applicant {
   applicationId: string;
@@ -38,7 +42,9 @@ export interface Applicant {
   recommendation: string;
 }
 
+
 // ─── DB → UI shape converters ─────────────────────────────────────────────────
+
 
 function dbStageToPipeline(stage: string): PipelineStage {
   const s = (stage || "").toLowerCase();
@@ -49,6 +55,7 @@ function dbStageToPipeline(stage: string): PipelineStage {
   return "Applied";
 }
 
+
 function dbApprovalToUI(status: string | null): "NONE" | "PENDING" | "APPROVED" | "REJECTED" {
   if (!status) return "NONE";
   const s = status.toUpperCase();
@@ -58,12 +65,15 @@ function dbApprovalToUI(status: string | null): "NONE" | "PENDING" | "APPROVED" 
   return "NONE";
 }
 
+
 function dbRecommendationToUI(r: string | null): Candidate["scorecard"]["recommendation"] {
   if (!r) return "";
   return r as Candidate["scorecard"]["recommendation"];
 }
 
+
 // ─── Main fetch ───────────────────────────────────────────────────────────────
+
 
 export async function fetchInitialData(): Promise<InitialData> {
   const session = await getSession();
@@ -76,15 +86,18 @@ export async function fetchInitialData(): Promise<InitialData> {
     };
   }
 
+
   try {
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
     };
 
-    // 1. Fetch Jobs from PostgreSQL Backend
-    const jobsRes = await fetch("http://localhost:3000/api/v1/jobs", { headers });
+
+    // 1. Fetch Jobs
+    const jobsRes = await fetch(`${API_BASE_URL}/api/v1/jobs`, { headers });
     const backendJobs = jobsRes.ok ? await jobsRes.json() : [];
     console.log("JOBS DATA 1: ", backendJobs);
+
 
     const jobs: Job[] = backendJobs.map((j: any) => ({
       id: j.id,
@@ -96,9 +109,11 @@ export async function fetchInitialData(): Promise<InitialData> {
       createdAt: j.createdAt ? String(j.createdAt).slice(0, 10) : "",
     }));
 
-    // 2. Fetch Candidates from PostgreSQL Backend
-    const candRes = await fetch("http://localhost:3000/api/v1/candidates", { headers });
+
+    // 2. Fetch Candidates
+    const candRes = await fetch(`${API_BASE_URL}/api/v1/candidates`, { headers });
     const backendCandidates = candRes.ok ? await candRes.json() : [];
+
 
     const candidates: Candidate[] = [];
     for (const c of backendCandidates) {
@@ -133,9 +148,11 @@ export async function fetchInitialData(): Promise<InitialData> {
       }
     }
 
-    // 3. Fetch Audit Logs from PostgreSQL Backend
-    const auditRes = await fetch("http://localhost:3000/api/v1/audit-logs", { headers });
+
+    // 3. Fetch Audit Logs
+    const auditRes = await fetch(`${API_BASE_URL}/api/v1/audit-logs`, { headers });
     const backendAuditLogs = auditRes.ok ? await auditRes.json() : [];
+
 
     const auditLogs: AuditEntry[] = backendAuditLogs.map((l: any) => ({
       timestamp: l.createdAt
@@ -147,9 +164,11 @@ export async function fetchInitialData(): Promise<InitialData> {
       notes: l.payload?.notes || l.action,
     }));
 
-    // 4. Fetch Role Permissions from PostgreSQL Backend
-    const profilesRes = await fetch("http://localhost:3000/api/v1/profiles", { headers });
+
+    // 4. Fetch Role Permissions
+    const profilesRes = await fetch(`${API_BASE_URL}/api/v1/profiles`, { headers });
     const backendProfiles = profilesRes.ok ? await profilesRes.json() : [];
+
 
     const BACKEND_PERM_MAP_REVERSE: Record<string, keyof PermissionSet> = {};
     for (const [key, codes] of Object.entries(BACKEND_PERM_MAP)) {
@@ -157,6 +176,7 @@ export async function fetchInitialData(): Promise<InitialData> {
         BACKEND_PERM_MAP_REVERSE[c] = key as keyof PermissionSet;
       }
     }
+
 
     const rolePermissions: RolePermissions = { ...DEFAULT_ROLE_PERMISSIONS };
     for (const p of backendProfiles) {
@@ -167,12 +187,14 @@ export async function fetchInitialData(): Promise<InitialData> {
       else if (nameNorm === "hiringmanager") roleKey = UserRole.HIRING_MANAGER;
       else if (nameNorm === "readonly") roleKey = UserRole.READ_ONLY;
 
+
       if (roleKey) {
         const set: PermissionSet = { ...DEFAULT_ROLE_PERMISSIONS[roleKey] };
-        // Reset all UI managed permissions to false first (since we will read them from DB)
+        // Reset all UI managed permissions to false first
         for (const key of ALL_PERMISSIONS) {
           set[key] = false;
         }
+
 
         // Enable permissions that are present in profilePermissions
         for (const pp of p.profilePermissions || []) {
@@ -186,9 +208,10 @@ export async function fetchInitialData(): Promise<InitialData> {
       }
     }
 
+
     return { candidates, jobs, auditLogs, rolePermissions };
   } catch (err) {
-    console.error("[fetchInitialData] PostgreSQL Backend error:", err);
+    console.error("[fetchInitialData] Backend error:", err);
     return {
       candidates: [],
       jobs: [],
@@ -198,25 +221,31 @@ export async function fetchInitialData(): Promise<InitialData> {
   }
 }
 
+
 // ─── Applicants list (with optional job filter) ───────────────────────────────
+
 
 export async function fetchApplicantsAction(jobId?: string): Promise<any[]> {
   const session = await getSession();
   if (!session || !session.accessToken) return [];
+
 
   try {
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
     };
 
-    const candRes = await fetch("http://localhost:3000/api/v1/candidates", { headers });
+
+    const candRes = await fetch(`${API_BASE_URL}/api/v1/candidates`, { headers });
     if (!candRes.ok) return [];
     const backendCandidates = await candRes.json();
+
 
     const applicants: any[] = [];
     for (const c of backendCandidates) {
       for (const cj of c.candidateJobs || []) {
         if (jobId && cj.jobId !== jobId) continue;
+
 
         applicants.push({
           applicationId: `${c.id}::${cj.jobId}`,
@@ -240,8 +269,10 @@ export async function fetchApplicantsAction(jobId?: string): Promise<any[]> {
       }
     }
 
+
     // Sort applicants by appliedAt DESC
     applicants.sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
+
 
     return applicants;
   } catch (err) {
@@ -250,18 +281,22 @@ export async function fetchApplicantsAction(jobId?: string): Promise<any[]> {
   }
 }
 
+
 export async function fetchObjectRecordsAction(objectApiName: string, page = 1, limit = 10, search = "") {
   const session = await getSession();
   if (!session || !session.accessToken) {
     throw new Error("Unauthorized: Access token is missing or expired.");
   }
 
+
   let endpointName = `${objectApiName.toLowerCase()}s`;
   if (objectApiName.toLowerCase() === "auditlog") {
     endpointName = "audit-logs";
   }
 
-  const url = `http://localhost:3000/api/v1/${endpointName}?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
+
+  const url = `${API_BASE_URL}/api/v1/${endpointName}?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
+
 
   try {
     const res = await fetch(url, {
@@ -271,10 +306,12 @@ export async function fetchObjectRecordsAction(objectApiName: string, page = 1, 
       cache: "no-store",
     });
 
+
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData.message || `Server returned ${res.status}: ${res.statusText}`);
     }
+
 
     const data = await res.json();
     const rows = Array.isArray(data) ? data : (data.data || []);
@@ -286,12 +323,13 @@ export async function fetchObjectRecordsAction(objectApiName: string, page = 1, 
   }
 }
 
+
 export async function fetchJobDetailsAction(jobId: string) {
   const session = await getSession();
   if (!session || !session.accessToken) {
     throw new Error("Unauthorized");
   }
-  const res = await fetch(`http://localhost:3000/api/v1/jobs/${jobId}`, {
+  const res = await fetch(`${API_BASE_URL}/api/v1/jobs/${jobId}`, {
     headers: { Authorization: `Bearer ${session.accessToken}` },
     cache: "no-store",
   });
@@ -300,18 +338,19 @@ export async function fetchJobDetailsAction(jobId: string) {
     try {
       const errJson = await res.json();
       msg = errJson.message || msg;
-    } catch (_) {}
+    } catch (_) { }
     throw new Error(msg);
   }
   return res.json();
 }
+
 
 export async function fetchCandidateDetailsAction(candidateId: string) {
   const session = await getSession();
   if (!session || !session.accessToken) {
     throw new Error("Unauthorized");
   }
-  const res = await fetch(`http://localhost:3000/api/v1/candidates/${candidateId}`, {
+  const res = await fetch(`${API_BASE_URL}/api/v1/candidates/${candidateId}`, {
     headers: { Authorization: `Bearer ${session.accessToken}` },
     cache: "no-store",
   });
@@ -320,8 +359,11 @@ export async function fetchCandidateDetailsAction(candidateId: string) {
     try {
       const errJson = await res.json();
       msg = errJson.message || msg;
-    } catch (_) {}
+    } catch (_) { }
     throw new Error(msg);
   }
   return res.json();
 }
+
+
+

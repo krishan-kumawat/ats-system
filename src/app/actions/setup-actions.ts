@@ -1,10 +1,14 @@
 "use server";
 
+
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { UserRole } from "@/lib/enums";
+import { API_BASE_URL } from "@/lib/api";
+
 
 // ─── User Setup Actions ───────────────────────────────────────────────────────
+
 
 export async function fetchSetupUserDetailsAction(userId: string) {
   const session = await getSession();
@@ -12,7 +16,8 @@ export async function fetchSetupUserDetailsAction(userId: string) {
     throw new Error("Unauthorized setup console access.");
   }
 
-  const res = await fetch(`http://localhost:3000/api/v1/setup/users/${userId}/details`, {
+
+  const res = await fetch(`${API_BASE_URL}/api/v1/setup/users/${userId}/details`, {
     headers: { Authorization: `Bearer ${session.accessToken}` },
     cache: "no-store",
   });
@@ -22,13 +27,15 @@ export async function fetchSetupUserDetailsAction(userId: string) {
   return res.json();
 }
 
+
 export async function updateUserGroupsAction(userId: string, groupIds: string[]) {
   const session = await getSession();
   if (!session || session.role !== UserRole.ADMIN) {
     throw new Error("Unauthorized group update.");
   }
 
-  const res = await fetch(`http://localhost:3000/api/v1/setup/users/${userId}/groups`, {
+
+  const res = await fetch(`${API_BASE_URL}/api/v1/setup/users/${userId}/groups`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
@@ -37,6 +44,7 @@ export async function updateUserGroupsAction(userId: string, groupIds: string[])
     body: JSON.stringify({ groupIds }),
   });
 
+
   if (!res.ok) {
     throw new Error("Failed to update user groups.");
   }
@@ -44,7 +52,9 @@ export async function updateUserGroupsAction(userId: string, groupIds: string[])
   return { success: true };
 }
 
+
 // ─── Profile Setup Actions (Mapped to security-settings REST endpoint) ────────
+
 
 export async function fetchSetupProfileDetailsAction(profileId: string) {
   const session = await getSession();
@@ -52,8 +62,9 @@ export async function fetchSetupProfileDetailsAction(profileId: string) {
     throw new Error("Unauthorized setup console access.");
   }
 
+
   // 1. Fetch profile metadata details
-  const profileRes = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}`, {
+  const profileRes = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}`, {
     headers: { Authorization: `Bearer ${session.accessToken}` },
     cache: "no-store",
   });
@@ -62,8 +73,9 @@ export async function fetchSetupProfileDetailsAction(profileId: string) {
   }
   const profile = await profileRes.json();
 
+
   // 2. Fetch OLS, FLS, and System permissions unified settings
-  const securityRes = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}/security-settings`, {
+  const securityRes = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/security-settings`, {
     headers: { Authorization: `Bearer ${session.accessToken}` },
     cache: "no-store",
   });
@@ -72,12 +84,14 @@ export async function fetchSetupProfileDetailsAction(profileId: string) {
   }
   const sec = await securityRes.json();
 
+
   // 3. Map to old UI contract structure
   const objects = (sec.objectPermissions || []).map((o: any) => ({
     id: o.schemaObjectId,
     apiName: o.apiName,
     label: o.label,
   }));
+
 
   const ols = (sec.objectPermissions || []).map((o: any) => ({
     schemaObjectId: o.schemaObjectId,
@@ -89,10 +103,12 @@ export async function fetchSetupProfileDetailsAction(profileId: string) {
     modifyAllData: o.modifyAllData,
   }));
 
+
   const systemPermissions = Object.entries(sec.systemPermissions || {}).map(([key, enabled]) => ({
     key,
     enabled: !!enabled,
   }));
+
 
   return {
     profile: {
@@ -109,6 +125,7 @@ export async function fetchSetupProfileDetailsAction(profileId: string) {
   };
 }
 
+
 export async function updateSetupProfileTabSettingsAction(
   profileId: string,
   tabSettings: { schemaObjectId: string; isVisible: boolean; precedenceOrder: number | null }[]
@@ -118,16 +135,19 @@ export async function updateSetupProfileTabSettingsAction(
     throw new Error("Unauthorized tab settings update.");
   }
 
-  const getRes = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}/security-settings`, {
+
+  const getRes = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/security-settings`, {
     headers: { Authorization: `Bearer ${session.accessToken}` },
     cache: "no-store",
   });
   if (!getRes.ok) throw new Error("Failed to fetch current security settings.");
   const sec = await getRes.json();
 
+
   sec.tabSettings = tabSettings;
 
-  const putRes = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}/security-settings`, {
+
+  const putRes = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/security-settings`, {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
@@ -136,11 +156,13 @@ export async function updateSetupProfileTabSettingsAction(
     body: JSON.stringify(sec),
   });
 
+
   if (!putRes.ok) {
     throw new Error("Failed to save tab settings update on backend.");
   }
   return { success: true };
 }
+
 
 export async function updateSetupProfileOLSListAction(
   profileId: string,
@@ -159,13 +181,15 @@ export async function updateSetupProfileOLSListAction(
     throw new Error("Unauthorized OLS update.");
   }
 
+
   // 1. Fetch current security settings
-  const getRes = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}/security-settings`, {
+  const getRes = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/security-settings`, {
     headers: { Authorization: `Bearer ${session.accessToken}` },
     cache: "no-store",
   });
   if (!getRes.ok) throw new Error("Failed to fetch current security settings.");
   const sec = await getRes.json();
+
 
   // 2. Update list
   sec.objectPermissions = (sec.objectPermissions || []).map((o: any) => {
@@ -173,8 +197,9 @@ export async function updateSetupProfileOLSListAction(
     return match ? { ...o, ...match } : o;
   });
 
+
   // 3. Put updated settings back to NestJS backend
-  const putRes = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}/security-settings`, {
+  const putRes = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/security-settings`, {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
@@ -182,6 +207,7 @@ export async function updateSetupProfileOLSListAction(
     },
     body: JSON.stringify(sec),
   });
+
 
   if (!putRes.ok) {
     throw new Error("Failed to save OLS update on backend.");
@@ -194,22 +220,25 @@ export async function fetchSetupProfileFieldsAction(profileId: string, schemaObj
     throw new Error("Unauthorized setup console access.");
   }
 
+
   // 1. Fetch security settings
-  const getRes = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}/security-settings`, {
+  const getRes = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/security-settings`, {
     headers: { Authorization: `Bearer ${session.accessToken}` },
     cache: "no-store",
   });
   if (!getRes.ok) throw new Error("Failed to fetch FLS settings.");
   const sec = await getRes.json();
 
+
   // 2. Filter fields and FLS mapping where schemaObjectId matches
   const matchedFp = (sec.fieldPermissions || []).filter((fp: any) => fp.schemaObjectId === schemaObjectId);
-  
+
   const fields = matchedFp.map((fp: any) => ({
     id: fp.schemaFieldId,
     apiName: fp.apiName,
     label: fp.label,
   }));
+
 
   const fls = matchedFp.map((fp: any) => ({
     schemaFieldId: fp.schemaFieldId,
@@ -217,11 +246,13 @@ export async function fetchSetupProfileFieldsAction(profileId: string, schemaObj
     allowEdit: fp.allowEdit,
   }));
 
+
   return {
     fields,
     fls,
   };
 }
+
 
 export async function updateSetupProfileFLSListAction(
   profileId: string,
@@ -232,13 +263,15 @@ export async function updateSetupProfileFLSListAction(
     throw new Error("Unauthorized FLS update.");
   }
 
+
   // 1. Fetch current settings
-  const getRes = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}/security-settings`, {
+  const getRes = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/security-settings`, {
     headers: { Authorization: `Bearer ${session.accessToken}` },
     cache: "no-store",
   });
   if (!getRes.ok) throw new Error("Failed to fetch current security settings.");
   const sec = await getRes.json();
+
 
   // 2. Update list
   sec.fieldPermissions = (sec.fieldPermissions || []).map((fp: any) => {
@@ -246,8 +279,9 @@ export async function updateSetupProfileFLSListAction(
     return match ? { ...fp, ...match } : fp;
   });
 
+
   // 3. Put updated settings back to NestJS backend
-  const putRes = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}/security-settings`, {
+  const putRes = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/security-settings`, {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
@@ -256,11 +290,13 @@ export async function updateSetupProfileFLSListAction(
     body: JSON.stringify(sec),
   });
 
+
   if (!putRes.ok) {
     throw new Error("Failed to save FLS update on backend.");
   }
   return { success: true };
 }
+
 
 export async function updateSetupProfileSystemAction(
   profileId: string,
@@ -271,13 +307,15 @@ export async function updateSetupProfileSystemAction(
     throw new Error("Unauthorized system permissions update.");
   }
 
+
   // 1. Fetch current settings
-  const getRes = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}/security-settings`, {
+  const getRes = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/security-settings`, {
     headers: { Authorization: `Bearer ${session.accessToken}` },
     cache: "no-store",
   });
   if (!getRes.ok) throw new Error("Failed to fetch current security settings.");
   const sec = await getRes.json();
+
 
   // 2. Update keys
   if (!sec.systemPermissions) sec.systemPermissions = {};
@@ -285,8 +323,9 @@ export async function updateSetupProfileSystemAction(
     sec.systemPermissions[perm.key] = perm.enabled;
   }
 
+
   // 3. Put back to NestJS
-  const putRes = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}/security-settings`, {
+  const putRes = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/security-settings`, {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
@@ -295,8 +334,12 @@ export async function updateSetupProfileSystemAction(
     body: JSON.stringify(sec),
   });
 
+
   if (!putRes.ok) {
     throw new Error("Failed to save system permissions update on backend.");
   }
   return { success: true };
 }
+
+
+

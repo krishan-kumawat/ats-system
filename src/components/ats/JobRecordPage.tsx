@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { AuditEntry, JobStatus } from "@/lib/atsStore";
 import {
   fetchRecordAccessAction,
@@ -10,6 +10,14 @@ import { fetchAssignableUsersAction } from "@/app/actions/assignments";
 import { fetchJobDetailsAction } from "@/app/actions/data";
 import { deleteJobAction } from "@/app/actions/jobs";
 import AddJobModal from "@/components/ats/AddJobModal";
+import { usePermissions, ObjectMetadata } from "@/context/PermissionsContext";
+import {
+  resolveFieldDisplayValue,
+  classifyRecordFields,
+  getFieldLabel,
+  RECORD_PAGE_EXCLUDED_FIELDS,
+} from "@/lib/fieldUtils";
+
 
 interface JobRecordPageProps {
   jobId: string;
@@ -24,6 +32,7 @@ interface JobRecordPageProps {
   onJobClone?: (job: any, audit: AuditEntry) => void;
 }
 
+
 export default function JobRecordPage({
   jobId,
   jobs,
@@ -37,6 +46,10 @@ export default function JobRecordPage({
   onJobClone,
 }: JobRecordPageProps) {
   const [activeSubTab, setActiveSubTab] = useState<"details" | "related">("details");
+  const { fetchMetadata } = usePermissions();
+  const [metadata, setMetadata] = useState<ObjectMetadata | null>(null);
+  const [metadataLoading, setMetadataLoading] = useState(true);
+
 
   const [access, setAccess] = useState({ isEditable: false, isDeletable: false, isShareable: false });
   const [showShareModal, setShowShareModal] = useState(false);
@@ -47,12 +60,15 @@ export default function JobRecordPage({
   const [sharingLoading, setSharingLoading] = useState(false);
   const [sharingError, setSharingError] = useState<string | null>(null);
 
+
   const [fullJob, setFullJob] = useState<any | null>(null);
   const [fullJobLoading, setFullJobLoading] = useState(true);
+
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
 
   async function handleDelete() {
     if (!window.confirm("Are you sure you want to delete this job requisition?")) return;
@@ -68,10 +84,12 @@ export default function JobRecordPage({
     onBack();
   }
 
+
   useEffect(() => {
     fetchRecordAccessAction(jobId, "Job")
       .then((res) => setAccess(res))
       .catch((err) => console.error("Error fetching record access", err));
+
 
     fetchJobDetailsAction(jobId)
       .then((res) => {
@@ -82,7 +100,16 @@ export default function JobRecordPage({
         console.error("Error fetching job details", err);
         setFullJobLoading(false);
       });
+
+
+    fetchMetadata("Job")
+      .then((meta) => {
+        setMetadata(meta);
+        setMetadataLoading(false);
+      })
+      .catch(() => setMetadataLoading(false));
   }, [jobId]);
+
 
   const handleOpenSharing = async () => {
     setSharingLoading(true);
@@ -102,6 +129,7 @@ export default function JobRecordPage({
     }
   };
 
+
   const handleAddShare = async () => {
     if (!shareTargetUserId) return;
     setSharingLoading(true);
@@ -119,6 +147,7 @@ export default function JobRecordPage({
     }
   };
 
+
   const handleRemoveShare = async (targetUserId: string) => {
     setSharingLoading(true);
     setSharingError(null);
@@ -133,6 +162,7 @@ export default function JobRecordPage({
       setSharingLoading(false);
     }
   };
+
 
   const job = jobs.find((j) => j.id === jobId);
   if (!job) {
@@ -150,8 +180,10 @@ export default function JobRecordPage({
     );
   }
 
+
   // Filter candidates applied to this job
   const relatedCandidates = candidates.filter((c) => c.jobId === jobId || c.job?.id === jobId);
+
 
   // Filter audit logs for this job
   const relatedLogs = auditLogs.filter(
@@ -160,9 +192,18 @@ export default function JobRecordPage({
       (log.notes && log.notes.toLowerCase().includes(job.title.toLowerCase()))
   );
 
+
+  const record = fullJob || job;
+  const readableFields = metadata?.fields.filter((f) => f.allowRead) ?? [];
+  const classified = useMemo(
+    () => classifyRecordFields(readableFields, RECORD_PAGE_EXCLUDED_FIELDS),
+    [readableFields.length, metadata]
+  );
+
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#f3f3f3] dark:bg-slate-950 p-3 space-y-3 overflow-y-auto">
-      
+
       {/* 1. HIGHLIGHTS PANEL (Salesforce Header) */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded shadow-sm p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -179,6 +220,7 @@ export default function JobRecordPage({
           </div>
         </div>
 
+
         {/* Buttons Panel */}
         <div className="flex items-center gap-2">
           <button
@@ -187,7 +229,7 @@ export default function JobRecordPage({
           >
             Back to List
           </button>
-          
+
           {access.isShareable && (
             <button
               onClick={handleOpenSharing}
@@ -198,6 +240,7 @@ export default function JobRecordPage({
             </button>
           )}
 
+
           <button
             onClick={() => setShowCloneModal(true)}
             className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-805 text-slate-750 dark:text-slate-300 rounded text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5"
@@ -205,6 +248,7 @@ export default function JobRecordPage({
             <i className="fa-solid fa-copy text-[10px]" />
             Clone
           </button>
+
 
           {access.isEditable && (
             <button
@@ -215,6 +259,7 @@ export default function JobRecordPage({
               Edit
             </button>
           )}
+
 
           {access.isDeletable && (
             <button
@@ -229,134 +274,145 @@ export default function JobRecordPage({
         </div>
       </div>
 
-      {/* Highlights Grid summary fields */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded shadow-sm p-3 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs flex-shrink-0">
-        <div>
-          <div className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[9px]">Department</div>
-          <div className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{job.department?.name || job.department || "Engineering"}</div>
+
+      {/* Highlights Grid summary fields — driven by metadata */}
+      {classified.highlights.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded shadow-sm p-3 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs flex-shrink-0">
+          {classified.highlights.map((field) => {
+            const displayVal = resolveFieldDisplayValue(record, field.apiName);
+            const isStatus = field.apiName === "status";
+            return (
+              <div key={field.apiName}>
+                <div className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[9px]">
+                  {getFieldLabel(field.apiName, field.label)}
+                </div>
+                {isStatus ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-450 mt-1 border border-emerald-250/30">
+                    {displayVal}
+                  </span>
+                ) : (
+                  <div className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{displayVal}</div>
+                )}
+              </div>
+            );
+          })}
         </div>
-        <div>
-          <div className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[9px]">Status</div>
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-450 mt-1 border border-emerald-250/30">
-            {job.status || "Open"}
-          </span>
-        </div>
-        <div>
-          <div className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[9px]">Budget Limit</div>
-          <div className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
-            {job.budgetLimit ? `$${Number(job.budgetLimit).toLocaleString()}` : "$150,000"}
-          </div>
-        </div>
-        <div>
-          <div className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[9px]">Created Date</div>
-          <div className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
-            {job.createdAt ? new Date(job.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "Today"}
-          </div>
-        </div>
-      </div>
+      )}
+
 
       {/* 2. MAIN LAYOUT (Details/Related Left, Sidebar Right) */}
       <div className="flex-1 flex flex-col lg:flex-row gap-3 min-h-0">
-        
+
         {/* Left Column (Tabs Details & Related) */}
         <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded shadow-sm flex flex-col min-h-0">
-          
+
           {/* Salesforce Sub-tab headers */}
           <div className="flex border-b border-slate-200 dark:border-slate-850 px-4 bg-slate-50/50 dark:bg-slate-900/50">
             <button
               onClick={() => setActiveSubTab("details")}
-              className={`px-4 py-3 text-xs font-bold transition-all border-b-2 -mb-px flex items-center gap-1.5 ${
-                activeSubTab === "details"
+              className={`px-4 py-3 text-xs font-bold transition-all border-b-2 -mb-px flex items-center gap-1.5 ${activeSubTab === "details"
                   ? "border-[#0070d2] text-[#0070d2] dark:border-indigo-400 dark:text-indigo-400"
                   : "border-transparent text-slate-500 dark:text-slate-450 hover:text-slate-700"
-              }`}
+                }`}
             >
               <i className="fa-solid fa-circle-info text-[10px]" />
               Details
             </button>
             <button
               onClick={() => setActiveSubTab("related")}
-              className={`px-4 py-3 text-xs font-bold transition-all border-b-2 -mb-px flex items-center gap-1.5 ${
-                activeSubTab === "related"
+              className={`px-4 py-3 text-xs font-bold transition-all border-b-2 -mb-px flex items-center gap-1.5 ${activeSubTab === "related"
                   ? "border-[#0070d2] text-[#0070d2] dark:border-indigo-400 dark:text-indigo-400"
                   : "border-transparent text-slate-500 dark:text-slate-450 hover:text-slate-700"
-              }`}
+                }`}
             >
               <i className="fa-solid fa-list-ul text-[10px]" />
               Related Applicants ({relatedCandidates.length})
             </button>
           </div>
 
+
           <div className="flex-1 p-5 overflow-y-auto min-h-0 text-xs text-slate-700 dark:text-slate-350">
-            
-            {/* Details Grid */}
+
+            {/* Details Grid — driven by metadata */}
             {activeSubTab === "details" && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-                  <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
-                    <span className="text-slate-400 dark:text-slate-500 font-medium">Job Title</span>
-                    <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">{job.title}</p>
-                  </div>
-                  <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
-                    <span className="text-slate-400 dark:text-slate-500 font-medium">Department</span>
-                    <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">{job.department?.name || job.department || "Engineering"}</p>
-                  </div>
-                  <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
-                    <span className="text-slate-400 dark:text-slate-500 font-medium">Status</span>
-                    <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">{job.status || "Open"}</p>
-                  </div>
-                  <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
-                    <span className="text-slate-400 dark:text-slate-500 font-medium">Budget Limit</span>
-                    <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">
-                      {job.budgetLimit ? `$${Number(job.budgetLimit).toLocaleString()}` : "$150,000"}
-                    </p>
-                  </div>
-                  <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
-                    <span className="text-slate-400 dark:text-slate-500 font-medium">Job Record ID</span>
-                    <p className="font-semibold font-mono text-slate-500 dark:text-slate-400 mt-1">{job.id}</p>
-                  </div>
-                  <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
-                    <span className="text-slate-400 dark:text-slate-500 font-medium">System Permissions Required</span>
-                    <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">recruitment:job:read</p>
-                  </div>
+              (metadataLoading || fullJobLoading) ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
                 </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Title field (if present in metadata) */}
+                  {classified.titleField && (
+                    <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
+                      <span className="text-slate-400 dark:text-slate-500 font-medium">
+                        {getFieldLabel(classified.titleField.apiName, classified.titleField.label)}
+                      </span>
+                      <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">
+                        {resolveFieldDisplayValue(record, classified.titleField.apiName)}
+                      </p>
+                    </div>
+                  )}
 
-                <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
-                  <span className="text-slate-400 dark:text-slate-500 font-medium">Job Description</span>
-                  <p className="text-slate-700 dark:text-slate-350 mt-1.5 leading-relaxed bg-slate-50 dark:bg-slate-900/60 p-3 rounded border border-slate-100 dark:border-slate-800">
-                    {job.description || `Responsible for designing, building, and deploying highly modular and scalable distributed application layers. Collaborates closely with product engineering teams to implement modern Salesforce OLS/FLS metadata controls.`}
-                  </p>
-                </div>
 
-                {/* System Information */}
-                <div className="pt-6 border-t border-slate-200 dark:border-slate-800">
-                  <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-1.5">
-                    <i className="fa-solid fa-circle-info text-indigo-500" />
-                    System Information
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                  {/* Dynamic detail fields in 2-col grid */}
+                  {(classified.highlights.length > 0 || classified.details.length > 0) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                      {[...classified.highlights, ...classified.details].map((field) => (
+                        <div key={field.apiName} className="border-b border-slate-100 dark:border-slate-800 pb-2">
+                          <span className="text-slate-400 dark:text-slate-500 font-medium">
+                            {getFieldLabel(field.apiName, field.label)}
+                          </span>
+                          <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">
+                            {resolveFieldDisplayValue(record, field.apiName)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+
+                  {/* Description field — full width */}
+                  {classified.description.length > 0 && (
                     <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
-                      <span className="text-slate-400 dark:text-slate-500 font-medium">Owner</span>
-                      <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">
-                        {fullJob?.owner ? `${fullJob.owner.firstName} ${fullJob.owner.lastName}` : job.hiringManager || "System Owner"}
+                      <span className="text-slate-400 dark:text-slate-500 font-medium">
+                        {getFieldLabel(classified.description[0].apiName, classified.description[0].label)}
+                      </span>
+                      <p className="text-slate-700 dark:text-slate-350 mt-1.5 leading-relaxed bg-slate-50 dark:bg-slate-900/60 p-3 rounded border border-slate-100 dark:border-slate-800">
+                        {record?.description || "-"}
                       </p>
                     </div>
-                    <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
-                      <span className="text-slate-400 dark:text-slate-500 font-medium">Created By</span>
-                      <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">
-                        {fullJob?.createdBy ? `${fullJob.createdBy.firstName} ${fullJob.createdBy.lastName}` : "System"} ({fullJob?.createdDate ? new Date(fullJob.createdDate).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : (job.createdAt ? new Date(job.createdAt).toLocaleDateString() : "N/A")})
-                      </p>
-                    </div>
-                    <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
-                      <span className="text-slate-400 dark:text-slate-500 font-medium">Last Modified By</span>
-                      <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">
-                        {fullJob?.lastModifiedBy ? `${fullJob.lastModifiedBy.firstName} ${fullJob.lastModifiedBy.lastName}` : "System"} ({fullJob?.lastModifiedDate ? new Date(fullJob.lastModifiedDate).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "N/A"})
-                      </p>
+                  )}
+
+
+                  {/* System Information */}
+                  <div className="pt-6 border-t border-slate-200 dark:border-slate-800">
+                    <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                      <i className="fa-solid fa-circle-info text-indigo-500" />
+                      System Information
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                      <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
+                        <span className="text-slate-400 dark:text-slate-500 font-medium">Created By</span>
+                        <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">
+                          {resolveFieldDisplayValue(record, "createdBy") !== "-" ? resolveFieldDisplayValue(record, "createdBy") : "-"}
+                          {" "}
+                          ({resolveFieldDisplayValue(record, "createdAt") !== "-" ? resolveFieldDisplayValue(record, "createdAt") : (record?.createdAt ? new Date(record.createdAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "-")})
+                        </p>
+                      </div>
+                      <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
+                        <span className="text-slate-400 dark:text-slate-500 font-medium">Last Modified By</span>
+                        <p className="font-semibold text-slate-800 dark:text-slate-100 mt-1">
+                          {resolveFieldDisplayValue(record, "lastModifiedBy") !== "-" ? resolveFieldDisplayValue(record, "lastModifiedBy") : (resolveFieldDisplayValue(record, "updatedBy") !== "-" ? resolveFieldDisplayValue(record, "updatedBy") : "-")}
+                          {" "}
+                          ({record?.lastModifiedDate || record?.updatedAt ? new Date(record.lastModifiedDate || record.updatedAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "-"})
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )
             )}
+
 
             {/* Related List */}
             {activeSubTab === "related" && (
@@ -366,6 +422,7 @@ export default function JobRecordPage({
                     Applicants applying to this job ({relatedCandidates.length})
                   </h3>
                 </div>
+
 
                 {relatedCandidates.length === 0 ? (
                   <div className="text-center py-8 text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg">
@@ -406,8 +463,10 @@ export default function JobRecordPage({
               </div>
             )}
 
+
           </div>
         </div>
+
 
         {/* Right Column (Activities / Activity Timeline) */}
         <div className="w-full lg:w-[320px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded shadow-sm flex flex-col p-4 space-y-4 flex-shrink-0">
@@ -419,6 +478,7 @@ export default function JobRecordPage({
               Live audit events matching this job record
             </p>
           </div>
+
 
           <div className="flex-1 overflow-y-auto space-y-3 pr-1 text-xs">
             {relatedLogs.length === 0 ? (
@@ -445,7 +505,9 @@ export default function JobRecordPage({
           </div>
         </div>
 
+
       </div>
+
 
       {showShareModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -466,6 +528,7 @@ export default function JobRecordPage({
               </button>
             </div>
 
+
             {/* Modal Body */}
             <div className="p-5 overflow-y-auto space-y-5 flex-1 min-h-0 text-xs">
               {sharingError && (
@@ -474,6 +537,7 @@ export default function JobRecordPage({
                   <span>{sharingError}</span>
                 </div>
               )}
+
 
               {/* Share with New Collaborator Row */}
               <div className="bg-slate-50 dark:bg-slate-950/40 p-4 border border-slate-150 dark:border-slate-800/80 rounded-lg space-y-3">
@@ -517,6 +581,7 @@ export default function JobRecordPage({
                   </button>
                 </div>
               </div>
+
 
               {/* Collaborators List */}
               <div className="space-y-2">
@@ -576,15 +641,16 @@ export default function JobRecordPage({
         </div>
       )}
 
+
       {showEditModal && (
         <AddJobModal
           mode="edit"
           jobId={jobId}
           initialValues={{
-            title: job.title,
-            department: job.department?.name || job.department || "Engineering",
-            status: (job.status || "OPEN").toUpperCase() as unknown as JobStatus,
-            budget: String(job.budgetLimit || ""),
+            title: job.title || "",
+            department: job.department?.name || job.department || "",
+            status: (job.status || "DRAFT").toUpperCase().replace(/ /g, "_") as JobStatus,
+            budget: job.budgetLimit ? String(job.budgetLimit) : "",
             hiringManagerName: fullJob?.owner ? `${fullJob.owner.firstName} ${fullJob.owner.lastName}` : job.hiringManager || "",
             hiringManagerId: fullJob?.ownerId || "",
           }}
@@ -594,14 +660,15 @@ export default function JobRecordPage({
         />
       )}
 
+
       {showCloneModal && (
         <AddJobModal
           mode="clone"
           initialValues={{
-            title: `Clone of ${job.title}`,
-            department: job.department?.name || job.department || "Engineering",
-            status: (job.status || "OPEN").toUpperCase() as unknown as JobStatus,
-            budget: String(job.budgetLimit || ""),
+            title: job.title ? `Clone of ${job.title}` : "",
+            department: job.department?.name || job.department || "",
+            status: (job.status || "DRAFT").toUpperCase().replace(/ /g, "_") as JobStatus,
+            budget: job.budgetLimit ? String(job.budgetLimit) : "",
             hiringManagerName: fullJob?.owner ? `${fullJob.owner.firstName} ${fullJob.owner.lastName}` : job.hiringManager || "",
             hiringManagerId: fullJob?.ownerId || "",
           }}
@@ -613,12 +680,17 @@ export default function JobRecordPage({
     </div>
   );
 
+
   function handleEditSave(updatedJob: any, audit: AuditEntry) {
     setFullJob(updatedJob);
     onJobUpdate?.(updatedJob, audit);
   }
 
+
   function handleCloneSave(clonedJob: any, audit: AuditEntry) {
     onJobClone?.(clonedJob, audit);
   }
 }
+
+
+

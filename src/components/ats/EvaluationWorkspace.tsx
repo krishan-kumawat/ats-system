@@ -1,9 +1,11 @@
 "use client";
 /* eslint-disable react-hooks/set-state-in-effect */
 
+
 import { useState, useEffect } from "react";
 import { Candidate, Role, AuditEntry, Recommendation } from "@/lib/atsStore";
 import { fetchCandidateDetailsAction } from "@/app/actions/data";
+
 
 interface EvaluationWorkspaceProps {
   candidate: Candidate;
@@ -17,6 +19,7 @@ interface EvaluationWorkspaceProps {
   onApproveOffer?: (applicationId: string) => Promise<void>;
   onRejectOffer?: (applicationId: string) => Promise<void>;
 }
+
 
 export default function EvaluationWorkspace({
   candidate,
@@ -39,8 +42,10 @@ export default function EvaluationWorkspace({
     candidate.scorecard.recommendation
   );
 
+
   const [fullCandidate, setFullCandidate] = useState<any | null>(null);
   const [fullCandLoading, setFullCandLoading] = useState(true);
+
 
   useEffect(() => {
     setTechScore(candidate.scorecard.technicalScore || 1);
@@ -49,6 +54,7 @@ export default function EvaluationWorkspace({
     setPros(candidate.scorecard.pros);
     setCons(candidate.scorecard.cons);
     setRecommendation(candidate.scorecard.recommendation);
+
 
     const candUuid = candidate.id.split("::")[0];
     fetchCandidateDetailsAction(candUuid)
@@ -61,6 +67,7 @@ export default function EvaluationWorkspace({
         setFullCandLoading(false);
       });
   }, [candidate.id]);
+
 
   function saveScorecard() {
     const avg = ((techScore + sysScore + cultureScore) / 3).toFixed(1);
@@ -81,9 +88,10 @@ export default function EvaluationWorkspace({
       target: candidate.name,
       notes: `Average ratings logged: ${avg}/5. Recommendation: ${recommendation || "NONE"}.`,
     });
-    onSaveScorecard?.(candidate.id, newScorecard).catch(() => {});
-    onToast("Evaluation Saved", "Candidate scorecard committed to internal database.", "check");
+    onSaveScorecard?.(candidate.id, newScorecard).catch(() => { });
+    onToast("Evaluation Saved", "Candidate scorecard saved successfully.", "check");
   }
+
 
   function approveOffer() {
     if (candidate.founderApproval.status !== "PENDING") {
@@ -102,13 +110,14 @@ export default function EvaluationWorkspace({
       target: candidate.name,
       notes: `Digitally signed off salary allocation of $${(candidate.proposedSalary || candidate.expectedSalary).toLocaleString("en-US")} annually.`,
     });
-    onApproveOffer?.(candidate.id).catch(() => {});
+    onApproveOffer?.(candidate.id).catch(() => { });
     onToast(
       "Offer Approved",
       `${candidate.name}'s gate sign-off completed. Recruiter unlocked.`,
       "check"
     );
   }
+
 
   function rejectOffer() {
     if (candidate.founderApproval.status !== "PENDING") {
@@ -128,13 +137,15 @@ export default function EvaluationWorkspace({
       target: candidate.name,
       notes: "Offer returned for budget readjustments. Candidate reverted to Interviewing.",
     });
-    onRejectOffer?.(candidate.id).catch(() => {});
+    onRejectOffer?.(candidate.id).catch(() => { });
     onToast("Gate Blocked", "Offer rejected. Candidate reverted to Interviewing.", "ban");
     onClose();
   }
 
+
   const isLocked = candidate.founderApproval.status === "PENDING";
   const approvalStatus = candidate.founderApproval.status;
+
 
   return (
     <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 z-40 flex flex-col overflow-hidden transition-colors duration-200">
@@ -174,6 +185,7 @@ export default function EvaluationWorkspace({
         </div>
       </div>
 
+
       {/* Split panes */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Resume viewer */}
@@ -201,6 +213,7 @@ export default function EvaluationWorkspace({
                 </div>
               </div>
 
+
               <div style={{ marginBottom: 20 }}>
                 <h3 style={{ fontSize: 12, fontWeight: "bold", color: "#0f172a", textTransform: "uppercase", borderBottom: "1px solid #e2e8f0", paddingBottom: 4, marginBottom: 8 }}>
                   Professional Profile
@@ -209,6 +222,7 @@ export default function EvaluationWorkspace({
                   Experienced professional specializing in {candidate.department.toLowerCase()} ecosystems. Proven track record leading major project deliveries, resolving operational bottlenecks, and translating complex requirements into solid architecture.
                 </p>
               </div>
+
 
               <div style={{ marginBottom: 20 }}>
                 <h3 style={{ fontSize: 12, fontWeight: "bold", color: "#0f172a", textTransform: "uppercase", borderBottom: "1px solid #e2e8f0", paddingBottom: 4, marginBottom: 8 }}>
@@ -225,6 +239,7 @@ export default function EvaluationWorkspace({
                   ))}
                 </div>
               </div>
+
 
               <div>
                 <h3 style={{ fontSize: 12, fontWeight: "bold", color: "#0f172a", textTransform: "uppercase", borderBottom: "1px solid #e2e8f0", paddingBottom: 4, marginBottom: 8 }}>
@@ -256,12 +271,14 @@ export default function EvaluationWorkspace({
           </div>
         </div>
 
+
         {/* Right: Scorecard */}
         <div className="w-1/2 flex flex-col overflow-y-auto p-6 space-y-6 bg-white dark:bg-slate-950">
           <div>
             <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Interview Evaluation Scorecard</h3>
             <p className="text-xs text-slate-400 mt-0.5">Rate technical competencies and document key hiring takeaways.</p>
           </div>
+
 
           <div className="space-y-4 border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-900/50">
             <div>
@@ -280,6 +297,7 @@ export default function EvaluationWorkspace({
               />
             </div>
 
+
             <div>
               <div className="flex justify-between text-xs font-semibold mb-1">
                 <span className="text-slate-700 dark:text-slate-300">System Architecture:</span>
@@ -295,6 +313,7 @@ export default function EvaluationWorkspace({
                 className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-600"
               />
             </div>
+
 
             <div>
               <div className="flex justify-between text-xs font-semibold mb-1">
@@ -313,6 +332,7 @@ export default function EvaluationWorkspace({
             </div>
           </div>
 
+
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Candidate Strengths (Pros)</label>
@@ -326,6 +346,7 @@ export default function EvaluationWorkspace({
               />
             </div>
 
+
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Areas for Growth (Cons)</label>
               <textarea
@@ -337,6 +358,7 @@ export default function EvaluationWorkspace({
                 className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
             </div>
+
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Overall Recommendation</label>
@@ -355,6 +377,7 @@ export default function EvaluationWorkspace({
             </div>
           </div>
 
+
           <div className="pt-2 flex justify-end">
             <button
               onClick={saveScorecard}
@@ -365,6 +388,7 @@ export default function EvaluationWorkspace({
               <span>Save Scorecard</span>
             </button>
           </div>
+
 
           {/* Offer Sign-off Gate Section */}
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
@@ -399,6 +423,7 @@ export default function EvaluationWorkspace({
                 </div>
               </div>
 
+
               {role === "founder" && approvalStatus === "PENDING" && (
                 <div className="flex items-center gap-2 pt-2">
                   <button
@@ -420,6 +445,7 @@ export default function EvaluationWorkspace({
             </div>
           </div>
 
+
           {/* System Information */}
           <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-900/50 text-xs mt-4">
             <h4 className="font-bold text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-1.5 uppercase tracking-wider text-[10px]">
@@ -436,7 +462,7 @@ export default function EvaluationWorkspace({
               <div className="flex justify-between border-b border-slate-100 dark:border-slate-900 pb-1.5">
                 <span className="text-slate-400 dark:text-slate-500 font-medium">Created By</span>
                 <span className="font-semibold text-slate-850 dark:text-slate-100 text-right">
-                  {fullCandidate?.createdBy ? `${fullCandidate.createdBy.firstName} ${fullCandidate.createdBy.lastName}` : "System"} <br/>
+                  {fullCandidate?.createdBy ? `${fullCandidate.createdBy.firstName} ${fullCandidate.createdBy.lastName}` : "System"} <br />
                   <span className="text-[10px] text-slate-400">
                     {fullCandidate?.createdDate ? new Date(fullCandidate.createdDate).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "N/A"}
                   </span>
@@ -445,7 +471,7 @@ export default function EvaluationWorkspace({
               <div className="flex justify-between pb-0.5">
                 <span className="text-slate-400 dark:text-slate-500 font-medium">Last Modified By</span>
                 <span className="font-semibold text-slate-850 dark:text-slate-100 text-right">
-                  {fullCandidate?.lastModifiedBy ? `${fullCandidate.lastModifiedBy.firstName} ${fullCandidate.lastModifiedBy.lastName}` : "System"} <br/>
+                  {fullCandidate?.lastModifiedBy ? `${fullCandidate.lastModifiedBy.firstName} ${fullCandidate.lastModifiedBy.lastName}` : "System"} <br />
                   <span className="text-[10px] text-slate-400">
                     {fullCandidate?.lastModifiedDate ? new Date(fullCandidate.lastModifiedDate).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "N/A"}
                   </span>
@@ -454,8 +480,12 @@ export default function EvaluationWorkspace({
             </div>
           </div>
 
+
         </div>
       </div>
     </div>
   );
 }
+
+
+

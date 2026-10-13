@@ -1,10 +1,14 @@
 "use server";
 
+
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { Candidate } from "@/lib/atsStore";
+import { API_BASE_URL } from "@/lib/api";
+
 
 // ─── Save scorecard ───────────────────────────────────────────────────────────
+
 
 export interface SaveScorecardInput {
   applicationId: string;
@@ -16,21 +20,25 @@ export interface SaveScorecardInput {
   recommendation: string;
 }
 
+
 export async function saveScorecardAction(input: SaveScorecardInput): Promise<{ error?: string }> {
   const session = await getSession();
   if (!session || !session.accessToken) return { error: "Unauthorized" };
 
+
   try {
     const [candidateId, jobId] = input.applicationId.split("::");
     if (!candidateId || !jobId) throw new Error("Invalid application structure.");
+
 
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
       "Content-Type": "application/json",
     };
 
-    // Update candidate job scorecard fields directly in PostgreSQL
-    const res = await fetch(`http://localhost:3000/api/v1/candidates/${candidateId}/jobs/${jobId}`, {
+
+    // Update candidate job scorecard fields
+    const res = await fetch(`${API_BASE_URL}/api/v1/candidates/${candidateId}/jobs/${jobId}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({
@@ -43,10 +51,12 @@ export async function saveScorecardAction(input: SaveScorecardInput): Promise<{ 
       }),
     });
 
+
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
       throw new Error(`Backend error: ${res.status} ${errText}`);
     }
+
 
     revalidatePath("/");
     return {};
@@ -56,23 +66,28 @@ export async function saveScorecardAction(input: SaveScorecardInput): Promise<{ 
   }
 }
 
+
 // ─── Approve offer ────────────────────────────────────────────────────────────
+
 
 export async function approveOfferAction(applicationId: string): Promise<{ error?: string }> {
   const session = await getSession();
   if (!session || !session.accessToken) return { error: "Unauthorized" };
 
+
   try {
     const [candidateId, jobId] = applicationId.split("::");
     if (!candidateId || !jobId) throw new Error("Invalid application structure.");
+
 
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
       "Content-Type": "application/json",
     };
 
+
     // Approve offer and transition stage to offered
-    const res = await fetch(`http://localhost:3000/api/v1/candidates/${candidateId}/jobs/${jobId}`, {
+    const res = await fetch(`${API_BASE_URL}/api/v1/candidates/${candidateId}/jobs/${jobId}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({
@@ -81,10 +96,12 @@ export async function approveOfferAction(applicationId: string): Promise<{ error
       }),
     });
 
+
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
       throw new Error(`Backend error: ${res.status} ${errText}`);
     }
+
 
     revalidatePath("/");
     return {};
@@ -94,7 +111,9 @@ export async function approveOfferAction(applicationId: string): Promise<{ error
   }
 }
 
+
 // ─── Reject offer ─────────────────────────────────────────────────────────────
+
 
 export async function rejectOfferAction(
   applicationId: string,
@@ -103,17 +122,20 @@ export async function rejectOfferAction(
   const session = await getSession();
   if (!session || !session.accessToken) return { error: "Unauthorized" };
 
+
   try {
     const [candidateId, jobId] = applicationId.split("::");
     if (!candidateId || !jobId) throw new Error("Invalid application structure.");
+
 
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
       "Content-Type": "application/json",
     };
 
+
     // Reject offer and revert status back to interviewing
-    const res = await fetch(`http://localhost:3000/api/v1/candidates/${candidateId}/jobs/${jobId}`, {
+    const res = await fetch(`${API_BASE_URL}/api/v1/candidates/${candidateId}/jobs/${jobId}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({
@@ -123,10 +145,12 @@ export async function rejectOfferAction(
       }),
     });
 
+
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
       throw new Error(`Backend error: ${res.status} ${errText}`);
     }
+
 
     revalidatePath("/");
     return {};
@@ -136,7 +160,9 @@ export async function rejectOfferAction(
   }
 }
 
+
 // ─── Move pipeline stage ──────────────────────────────────────────────────────
+
 
 export async function movePipelineAction(
   applicationId: string,
@@ -147,14 +173,17 @@ export async function movePipelineAction(
   const session = await getSession();
   if (!session || !session.accessToken) return { error: "Unauthorized" };
 
+
   try {
     const [candidateId, jobId] = applicationId.split("::");
     if (!candidateId || !jobId) throw new Error("Invalid application structure.");
+
 
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
       "Content-Type": "application/json",
     };
+
 
     const statusMap: Record<Candidate["stage"], string> = {
       Applied: "Applied",
@@ -163,9 +192,11 @@ export async function movePipelineAction(
       Offer: "Offered",
     };
 
+
     const updatePayload: any = {
       status: statusMap[targetStage],
     };
+
 
     if (proposedSalary !== undefined) {
       updatePayload.proposedSalary = Number(proposedSalary);
@@ -177,16 +208,19 @@ export async function movePipelineAction(
       updatePayload.approvalStatus = "PENDING";
     }
 
-    const res = await fetch(`http://localhost:3000/api/v1/candidates/${candidateId}/jobs/${jobId}`, {
+
+    const res = await fetch(`${API_BASE_URL}/api/v1/candidates/${candidateId}/jobs/${jobId}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify(updatePayload),
     });
 
+
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
       throw new Error(`Backend error: ${res.status} ${errText}`);
     }
+
 
     revalidatePath("/");
     return {};
@@ -196,7 +230,9 @@ export async function movePipelineAction(
   }
 }
 
+
 // ─── Ingest candidate ─────────────────────────────────────────────────────────
+
 
 export interface IngestCandidateInput {
   name: string;
@@ -210,11 +246,13 @@ export interface IngestCandidateInput {
   sourceTag?: string;
 }
 
+
 export async function ingestCandidateAction(
   input: IngestCandidateInput
 ): Promise<{ applicationId: string; error?: string }> {
   const session = await getSession();
   if (!session || !session.accessToken) return { applicationId: "", error: "Unauthorized" };
+
 
   try {
     const headers = {
@@ -222,13 +260,15 @@ export async function ingestCandidateAction(
       "Content-Type": "application/json",
     };
 
+
     // 1. Split name into first and last name
     const nameParts = input.name.trim().split(/\s+/);
     const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ") || "Candidate";
 
-    // 2. Create Candidate profile on PostgreSQL backend
-    const createCandRes = await fetch("http://localhost:3000/api/v1/candidates", {
+
+    // 2. Create Candidate profile
+    const createCandRes = await fetch(`${API_BASE_URL}/api/v1/candidates`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -240,16 +280,19 @@ export async function ingestCandidateAction(
       }),
     });
 
+
     if (!createCandRes.ok) {
       const errData = await createCandRes.json().catch(() => ({}));
       return { applicationId: "", error: errData.message || "Failed to create candidate profile on backend." };
     }
 
+
     const candidate = await createCandRes.json();
     const targetJobId = input.jobId || "unassigned";
 
+
     // 3. Link candidate to job
-    const linkRes = await fetch(`http://localhost:3000/api/v1/candidates/${candidate.id}/jobs`, {
+    const linkRes = await fetch(`${API_BASE_URL}/api/v1/candidates/${candidate.id}/jobs`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -258,13 +301,15 @@ export async function ingestCandidateAction(
       }),
     });
 
+
     if (!linkRes.ok) {
       const errData = await linkRes.json().catch(() => ({}));
       return { applicationId: "", error: errData.message || "Failed to link candidate to job." };
     }
 
+
     // 4. Update expectedSalary and sourceTag on the linked CandidateJob record
-    await fetch(`http://localhost:3000/api/v1/candidates/${candidate.id}/jobs/${targetJobId}`, {
+    await fetch(`${API_BASE_URL}/api/v1/candidates/${candidate.id}/jobs/${targetJobId}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({
@@ -273,6 +318,7 @@ export async function ingestCandidateAction(
       }),
     });
 
+
     revalidatePath("/");
     return { applicationId: `${candidate.id}::${targetJobId}` };
   } catch (err) {
@@ -280,3 +326,6 @@ export async function ingestCandidateAction(
     return { applicationId: "", error: "Failed to ingest candidate." };
   }
 }
+
+
+

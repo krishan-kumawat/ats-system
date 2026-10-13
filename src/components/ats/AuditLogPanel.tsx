@@ -1,6 +1,8 @@
 "use client";
 
+
 import { AuditEntry } from "@/lib/atsStore";
+
 
 const ACTION_STYLES: Record<string, string> = {
   INGESTED_PROFILE:
@@ -17,9 +19,11 @@ const ACTION_STYLES: Record<string, string> = {
     "bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-800",
 };
 
+
 interface AuditLogPanelProps {
   logs: AuditEntry[];
 }
+
 
 export default function AuditLogPanel({ logs }: AuditLogPanelProps) {
   return (
@@ -31,7 +35,7 @@ export default function AuditLogPanel({ logs }: AuditLogPanelProps) {
             Append-Only System Audit Logs
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Logs sensitive database modifications in real-time.
+            Logs sensitive system modifications in real-time.
           </p>
         </div>
         <span
@@ -43,11 +47,13 @@ export default function AuditLogPanel({ logs }: AuditLogPanelProps) {
         </span>
       </div>
 
+
       <div className="flex-1 overflow-y-auto border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/45 rounded-2xl p-4 space-y-2.5 shadow-inner">
         {[...logs].reverse().map((log, i) => {
           const actionClass =
             ACTION_STYLES[log.action] ??
             "bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-800";
+
 
           return (
             <div
@@ -83,6 +89,7 @@ export default function AuditLogPanel({ logs }: AuditLogPanelProps) {
           );
         })}
 
+
         {logs.length === 0 && (
           <div className="flex items-center justify-center h-32 text-xs text-slate-400 dark:text-slate-600">
             No audit entries recorded yet.
@@ -92,3 +99,6 @@ export default function AuditLogPanel({ logs }: AuditLogPanelProps) {
     </div>
   );
 }
+
+
+

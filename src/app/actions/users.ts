@@ -1,8 +1,11 @@
 "use server";
 
+
 import { revalidatePath } from "next/cache";
 import { UserRole } from "@/lib/enums";
 import { getSession, destroySession } from "@/lib/auth";
+import { API_BASE_URL } from "@/lib/api";
+
 
 export interface UserRow {
   id: string;
@@ -13,6 +16,7 @@ export interface UserRow {
   createdAt: string;
 }
 
+
 export interface CreateUserInput {
   name: string;
   email: string;
@@ -21,6 +25,7 @@ export interface CreateUserInput {
   roleName: string;
   departmentName?: string;
 }
+
 
 export interface UpdateUserInput {
   id: string;
@@ -32,6 +37,7 @@ export interface UpdateUserInput {
   password?: string; // only set if changing
 }
 
+
 function mapProfileToRole(profileName: string): UserRole {
   const norm = (profileName || "").toLowerCase().replace(/[\s_-]+/g, "");
   if (norm.includes("admin")) return UserRole.ADMIN;
@@ -41,7 +47,9 @@ function mapProfileToRole(profileName: string): UserRole {
   return UserRole.READ_ONLY;
 }
 
+
 // ─── Fetch all users — active first, then inactive (Founder only) ─────────────
+
 
 export interface FetchUsersResult {
   users: UserRow[];
@@ -51,6 +59,7 @@ export interface FetchUsersResult {
   roleCounts: Record<UserRole, number>;
   unauthorized?: boolean;
 }
+
 
 export async function fetchUsersAction(
   page: number = 1,
@@ -75,6 +84,7 @@ export async function fetchUsersAction(
     };
   }
 
+
   try {
     let backendProfile = roleFilter;
     if (roleFilter === UserRole.ADMIN) backendProfile = "Admin";
@@ -82,15 +92,18 @@ export async function fetchUsersAction(
     else if (roleFilter === UserRole.HIRING_MANAGER) backendProfile = "Hiring Manager";
     else if (roleFilter === UserRole.READ_ONLY) backendProfile = "Read Only";
 
-    const url = `http://localhost:3000/api/v1/users?page=${page}&limit=${limit}&search=${encodeURIComponent(
+
+    const url = `${API_BASE_URL}/api/v1/users?page=${page}&limit=${limit}&search=${encodeURIComponent(
       search
     )}&profile=${encodeURIComponent(backendProfile)}`;
+
 
     const response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
       },
     });
+
 
     if (response.status === 401) {
       await destroySession();
@@ -109,6 +122,7 @@ export async function fetchUsersAction(
       };
     }
 
+
     if (!response.ok) {
       console.error("[fetchUsersAction] Backend API error:", response.statusText);
       return {
@@ -125,10 +139,12 @@ export async function fetchUsersAction(
       };
     }
 
+
     const result = await response.json();
     const users = result.data || [];
     const total = result.total || 0;
     const profileCounts = result.profileCounts || {};
+
 
     const roleCounts: Record<UserRole, number> = {
       [UserRole.ADMIN]: profileCounts["Admin"] || 0,
@@ -136,6 +152,7 @@ export async function fetchUsersAction(
       [UserRole.HIRING_MANAGER]: profileCounts["Hiring Manager"] || 0,
       [UserRole.READ_ONLY]: profileCounts["Read Only"] || 0,
     };
+
 
     const mapped: UserRow[] = users.map((u: any) => ({
       id: u.id,
@@ -147,6 +164,7 @@ export async function fetchUsersAction(
         ? new Date(u.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
         : "",
     }));
+
 
     return {
       users: mapped,
@@ -172,7 +190,9 @@ export async function fetchUsersAction(
   }
 }
 
+
 // ─── Create user (Admin only) ─────────────────────────────────────────────────
+
 
 export async function createUserAction(
   input: CreateUserInput
@@ -181,17 +201,20 @@ export async function createUserAction(
   if (!session || !session.accessToken) return { unauthorized: true };
   if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can create users." };
 
+
   if (!input.name.trim()) return { error: "Name is required." };
   if (!input.email.trim()) return { error: "Email is required." };
   if (!input.password || input.password.length < 6)
     return { error: "Password must be at least 6 characters." };
+
 
   try {
     const nameParts = input.name.trim().split(/\s+/);
     const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ") || "User";
 
-    const response = await fetch("http://localhost:3000/api/v1/users", {
+
+    const response = await fetch(`${API_BASE_URL}/api/v1/users`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -208,18 +231,22 @@ export async function createUserAction(
       }),
     });
 
+
     if (response.status === 401) {
       await destroySession();
       return { unauthorized: true };
     }
+
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
       return { error: errData.message || "Failed to create user." };
     }
 
+
     const u = await response.json();
     revalidatePath("/");
+
 
     return {
       user: {
@@ -237,7 +264,9 @@ export async function createUserAction(
   }
 }
 
+
 // ─── Update user details (Admin only) ────────────────────────────────────────
+
 
 export async function updateUserAction(
   input: UpdateUserInput
@@ -246,15 +275,18 @@ export async function updateUserAction(
   if (!session || !session.accessToken) return { unauthorized: true };
   if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can edit users." };
 
+
   if (!input.name.trim()) return { error: "Name is required." };
   if (!input.email.trim()) return { error: "Email is required." };
   if (input.password && input.password.length < 6)
     return { error: "Password must be at least 6 characters." };
 
+
   try {
     const nameParts = input.name.trim().split(/\s+/);
     const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ") || "User";
+
 
     const bodyData: any = {
       email: input.email.trim().toLowerCase(),
@@ -265,11 +297,13 @@ export async function updateUserAction(
       departmentName: (input.departmentName && input.departmentName !== "None") ? input.departmentName : undefined,
     };
 
+
     if (input.password) {
       bodyData.password = input.password;
     }
 
-    const response = await fetch(`http://localhost:3000/api/v1/users/${input.id}`, {
+
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${input.id}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -278,18 +312,22 @@ export async function updateUserAction(
       body: JSON.stringify(bodyData),
     });
 
+
     if (response.status === 401) {
       await destroySession();
       return { unauthorized: true };
     }
+
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
       return { error: errData.message || "Failed to update user." };
     }
 
+
     const u = await response.json();
     revalidatePath("/");
+
 
     return {
       user: {
@@ -309,7 +347,9 @@ export async function updateUserAction(
   }
 }
 
+
 // ─── Toggle active/inactive (Admin only) ──────────────────────────────────────
+
 
 export async function toggleUserActiveAction(
   userId: string,
@@ -320,23 +360,27 @@ export async function toggleUserActiveAction(
   if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can activate/deactivate users." };
   if (userId === session.id) return { error: "You cannot deactivate your own account." };
 
+
   try {
     if (isActive) {
       return { error: "Re-activating a soft-deleted user is not supported by the backend API. Please create a new user." };
     }
 
+
     // Deactivating is done via DELETE (soft delete) in NestJS backend
-    const response = await fetch(`http://localhost:3000/api/v1/users/${userId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}`, {
       method: "DELETE",
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
       },
     });
 
+
     if (response.status === 401) {
       await destroySession();
       return { unauthorized: true };
     }
+
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
@@ -349,6 +393,7 @@ export async function toggleUserActiveAction(
     return { error: err instanceof Error ? err.message : "Failed to update user status." };
   }
 }
+
 
 export interface UserDetailPayload {
   id: string;
@@ -368,15 +413,18 @@ export interface UserDetailPayload {
   permissionSets?: any[];
 }
 
+
 export async function fetchUserDetailAction(userId: string): Promise<{ user?: UserDetailPayload; error?: string; unauthorized?: boolean }> {
   const session = await getSession();
   if (!session || !session.accessToken) return { unauthorized: true };
 
+
   try {
     const headers = { Authorization: `Bearer ${session.accessToken}` };
 
+
     // 1. Fetch user record
-    const userRes = await fetch(`http://localhost:3000/api/v1/users/${userId}`, { headers });
+    const userRes = await fetch(`${API_BASE_URL}/api/v1/users/${userId}`, { headers });
     if (userRes.status === 401) {
       await destroySession();
       return { unauthorized: true };
@@ -384,23 +432,25 @@ export async function fetchUserDetailAction(userId: string): Promise<{ user?: Us
     if (!userRes.ok) return { error: "User not found." };
     const u = await userRes.json();
 
+
     // 2. Fetch all system permissions
-    const permsRes = await fetch("http://localhost:3000/api/v1/permissions", { headers });
+    const permsRes = await fetch(`${API_BASE_URL}/api/v1/permissions`, { headers });
     if (permsRes.status === 401) {
       await destroySession();
       return { unauthorized: true };
     }
     const allPerms = permsRes.ok ? await permsRes.json() : [];
 
+
     // 3. Fetch the profile details of the user (to know which permissions the profile has)
-    const profilesRes = await fetch("http://localhost:3000/api/v1/profiles", { headers });
+    const profilesRes = await fetch(`${API_BASE_URL}/api/v1/profiles`, { headers });
     if (profilesRes.status === 401) {
       await destroySession();
       return { unauthorized: true };
     }
     const profiles = profilesRes.ok ? await profilesRes.json() : [];
     const userProfile = profiles.find((p: any) => p.id === u.profileId);
-    
+
     const profilePermCodes = new Set<string>();
     if (userProfile && userProfile.profilePermissions) {
       for (const pp of userProfile.profilePermissions) {
@@ -409,6 +459,7 @@ export async function fetchUserDetailAction(userId: string): Promise<{ user?: Us
         }
       }
     }
+
 
     // 4. Collect user custom permission set codes
     const customPermCodes = new Set<string>();
@@ -424,11 +475,14 @@ export async function fetchUserDetailAction(userId: string): Promise<{ user?: Us
       }
     }
 
+
     // Combined assigned codes
     const assignedCodes = new Set([...profilePermCodes, ...customPermCodes]);
 
+
     const assigned: any[] = [];
     const unassigned: any[] = [];
+
 
     for (const p of allPerms) {
       const item = {
@@ -443,6 +497,7 @@ export async function fetchUserDetailAction(userId: string): Promise<{ user?: Us
         unassigned.push(item);
       }
     }
+
 
     return {
       user: {
@@ -468,13 +523,15 @@ export async function fetchUserDetailAction(userId: string): Promise<{ user?: Us
   }
 }
 
+
 export async function fetchPermissionSetsAction(): Promise<{ permissionSets?: any[]; error?: string; unauthorized?: boolean }> {
   const session = await getSession();
   if (!session || !session.accessToken) return { unauthorized: true };
 
+
   try {
     const headers = { Authorization: `Bearer ${session.accessToken}` };
-    const res = await fetch("http://localhost:3000/api/v1/permission-sets", { headers, cache: "no-store" });
+    const res = await fetch(`${API_BASE_URL}/api/v1/permission-sets`, { headers, cache: "no-store" });
     if (res.status === 401) {
       await destroySession();
       return { unauthorized: true };
@@ -489,6 +546,7 @@ export async function fetchPermissionSetsAction(): Promise<{ permissionSets?: an
   }
 }
 
+
 export async function assignUserPermissionSetsAction(
   userId: string,
   permissionSetIds: string[]
@@ -497,16 +555,18 @@ export async function assignUserPermissionSetsAction(
   if (!session || !session.accessToken) return { unauthorized: true };
   if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can edit user permission set assignments." };
 
+
   try {
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
       "Content-Type": "application/json",
     };
-    const res = await fetch(`http://localhost:3000/api/v1/users/${userId}/permission-sets`, {
+    const res = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/permission-sets`, {
       method: "POST",
       headers,
       body: JSON.stringify({ permissionSetIds }),
     });
+
 
     if (res.status === 401) {
       await destroySession();
@@ -523,6 +583,7 @@ export async function assignUserPermissionSetsAction(
   }
 }
 
+
 export async function deleteUserAction(
   userId: string
 ): Promise<{ success?: boolean; error?: string; unauthorized?: boolean }> {
@@ -530,14 +591,16 @@ export async function deleteUserAction(
   if (!session || !session.accessToken) return { unauthorized: true };
   if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can delete users." };
 
+
   try {
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
     };
-    const res = await fetch(`http://localhost:3000/api/v1/users/${userId}`, {
+    const res = await fetch(`${API_BASE_URL}/api/v1/users/${userId}`, {
       method: "DELETE",
       headers,
     });
+
 
     if (res.status === 401) {
       await destroySession();
@@ -553,4 +616,8 @@ export async function deleteUserAction(
     return { error: err instanceof Error ? err.message : "Failed to delete user." };
   }
 }
+
+
+
+
 

@@ -1,11 +1,13 @@
 "use client";
 
+
 import { useState, useEffect } from "react";
 import {
   fetchProfilesAction,
   saveProfilePermissionsAction,
 } from "@/app/actions/permissions";
 import { AuditEntry } from "@/lib/atsStore";
+
 
 interface ProfileRecordPanelProps {
   profileId: string;
@@ -14,7 +16,9 @@ interface ProfileRecordPanelProps {
   onToast: (title: string, msg: string, icon?: string) => void;
 }
 
+
 type TabType = "ols" | "fls" | "system";
+
 
 export default function ProfileRecordPanel({
   profileId,
@@ -27,6 +31,7 @@ export default function ProfileRecordPanel({
   const [activeTab, setActiveTab] = useState<TabType>("ols");
   const [saving, setSaving] = useState(false);
 
+
   // Object-Level Security (OLS) State
   const [olsState, setOlsState] = useState<Record<string, { create: boolean; read: boolean; edit: boolean; delete: boolean }>>({
     Job: { create: false, read: false, edit: false, delete: false },
@@ -34,7 +39,8 @@ export default function ProfileRecordPanel({
     Profile: { create: false, read: false, edit: false, delete: false },
   });
 
-  // Field-Level Security (FLS) State (simulated FLS database)
+
+  // Field-Level Security (FLS) State
   const [selectedFlsObject, setSelectedFlsObject] = useState<"Job" | "Candidate">("Job");
   const [flsState, setFlsState] = useState<Record<string, Record<string, { read: boolean; edit: boolean }>>>({
     Job: {
@@ -53,11 +59,13 @@ export default function ProfileRecordPanel({
     },
   });
 
+
   // System Permissions State
   const [systemState, setSystemState] = useState({
     viewAllData: false,
     modifyAllData: false,
   });
+
 
   useEffect(() => {
     async function loadData() {
@@ -73,7 +81,7 @@ export default function ProfileRecordPanel({
         const found = res.profiles.find((p) => p.id === profileId);
         if (found) {
           setProfile(found);
-          
+
           // Map baseline OLS from result.profilePermissions
           const initialOls = {
             Job: { create: false, read: false, edit: false, delete: false },
@@ -81,18 +89,21 @@ export default function ProfileRecordPanel({
             Profile: { create: false, read: false, edit: false, delete: false },
           };
 
+
           if (found.profilePermissions) {
             const codes = found.profilePermissions.map((pp: any) => pp.permission?.code).filter(Boolean);
-            
+
             initialOls.Job.create = codes.includes("recruitment:job:create");
             initialOls.Job.read = codes.includes("recruitment:job:read");
             initialOls.Job.edit = codes.includes("recruitment:job:update") || codes.includes("recruitment:job:write");
             initialOls.Job.delete = codes.includes("recruitment:job:delete");
 
+
             initialOls.Candidate.create = codes.includes("recruitment:candidate:create");
             initialOls.Candidate.read = codes.includes("recruitment:candidate:read");
             initialOls.Candidate.edit = codes.includes("recruitment:candidate:update") || codes.includes("recruitment:candidate:write");
             initialOls.Candidate.delete = codes.includes("recruitment:candidate:delete");
+
 
             initialOls.Profile.create = codes.includes("identity:profile:create");
             initialOls.Profile.read = codes.includes("identity:profile:read");
@@ -100,6 +111,7 @@ export default function ProfileRecordPanel({
             initialOls.Profile.delete = codes.includes("identity:profile:delete");
           }
           setOlsState(initialOls);
+
 
           // Simulated / fetched system settings
           if (found.name === "System Administrator" || found.name === "Admin") {
@@ -114,9 +126,11 @@ export default function ProfileRecordPanel({
     loadData();
   }, [profileId, onToast]);
 
+
   const handleSave = async () => {
     if (!profile) return;
     setSaving(true);
+
 
     // Map olsState back to the baseline PermissionSet type expected by saveProfilePermissionsAction
     const permissionsPayload = {
@@ -134,11 +148,13 @@ export default function ProfileRecordPanel({
       recruitmentProfileDelete: olsState.Profile.delete,
     };
 
+
     const res = await saveProfilePermissionsAction(profile.id, permissionsPayload);
     if (res.unauthorized) {
       window.location.href = "/login";
       return;
     }
+
 
     if (res.error) {
       onToast("Save Failed", res.error, "ban");
@@ -155,6 +171,7 @@ export default function ProfileRecordPanel({
     setSaving(false);
   };
 
+
   const toggleOls = (obj: string, action: "create" | "read" | "edit" | "delete") => {
     setOlsState((prev) => ({
       ...prev,
@@ -164,6 +181,7 @@ export default function ProfileRecordPanel({
       },
     }));
   };
+
 
   const toggleFls = (field: string, access: "read" | "edit") => {
     setFlsState((prev) => ({
@@ -178,6 +196,7 @@ export default function ProfileRecordPanel({
     }));
   };
 
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-96 gap-3 text-slate-400 dark:text-slate-500">
@@ -186,6 +205,7 @@ export default function ProfileRecordPanel({
       </div>
     );
   }
+
 
   if (!profile) {
     return (
@@ -198,6 +218,7 @@ export default function ProfileRecordPanel({
       </div>
     );
   }
+
 
   return (
     <div className="flex flex-col h-full gap-5 text-slate-800 dark:text-slate-200">
@@ -224,6 +245,7 @@ export default function ProfileRecordPanel({
           </div>
         </div>
 
+
         <div className="flex items-center gap-2">
           <button
             onClick={onBack}
@@ -242,44 +264,43 @@ export default function ProfileRecordPanel({
         </div>
       </div>
 
+
       {/* Tabbed Card Section */}
       <div className="flex-1 flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
         {/* Underlined Sub Tabs Row */}
         <div className="flex border-b border-slate-200 dark:border-slate-800 px-5 flex-shrink-0 bg-slate-50/50 dark:bg-slate-950/20">
           <button
             onClick={() => setActiveTab("ols")}
-            className={`px-5 py-3.5 text-xs font-bold transition-all border-b-2 -mb-[1px] flex items-center gap-1.5 ${
-              activeTab === "ols"
+            className={`px-5 py-3.5 text-xs font-bold transition-all border-b-2 -mb-[1px] flex items-center gap-1.5 ${activeTab === "ols"
                 ? "border-indigo-600 text-indigo-600 dark:text-indigo-400"
                 : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-            }`}
+              }`}
           >
             <i className="fa-solid fa-cubes-stacked text-xs" />
             <span>Object Settings (OLS)</span>
           </button>
           <button
             onClick={() => setActiveTab("fls")}
-            className={`px-5 py-3.5 text-xs font-bold transition-all border-b-2 -mb-[1px] flex items-center gap-1.5 ${
-              activeTab === "fls"
+            className={`px-5 py-3.5 text-xs font-bold transition-all border-b-2 -mb-[1px] flex items-center gap-1.5 ${activeTab === "fls"
                 ? "border-indigo-600 text-indigo-600 dark:text-indigo-400"
                 : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-            }`}
+              }`}
           >
             <i className="fa-solid fa-table-columns text-xs" />
             <span>Field Settings (FLS)</span>
           </button>
           <button
             onClick={() => setActiveTab("system")}
-            className={`px-5 py-3.5 text-xs font-bold transition-all border-b-2 -mb-[1px] flex items-center gap-1.5 ${
-              activeTab === "system"
+            className={`px-5 py-3.5 text-xs font-bold transition-all border-b-2 -mb-[1px] flex items-center gap-1.5 ${activeTab === "system"
                 ? "border-indigo-600 text-indigo-600 dark:text-indigo-400"
                 : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-            }`}
+              }`}
           >
             <i className="fa-solid fa-gears text-xs" />
             <span>System Permissions</span>
           </button>
         </div>
+
 
         {/* Tab Contents Panel */}
         <div className="flex-1 overflow-y-auto p-6">
@@ -294,6 +315,7 @@ export default function ProfileRecordPanel({
                   Define baseline CRUD access permissions for standard ATS objects.
                 </p>
               </div>
+
 
               <div className="border border-slate-250 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm bg-slate-50/10">
                 <table className="w-full text-xs border-collapse">
@@ -310,10 +332,9 @@ export default function ProfileRecordPanel({
                     {Object.keys(olsState).map((obj) => (
                       <tr key={obj} className="hover:bg-slate-55/20 dark:hover:bg-slate-950/20 transition-colors">
                         <td className="px-5 py-4 font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                          <i className={`fa-solid ${
-                            obj === "Job" ? "fa-briefcase text-emerald-500" :
-                            obj === "Candidate" ? "fa-user-group text-indigo-500" : "fa-folder-tree text-amber-500"
-                          } text-sm`} />
+                          <i className={`fa-solid ${obj === "Job" ? "fa-briefcase text-emerald-500" :
+                              obj === "Candidate" ? "fa-user-group text-indigo-500" : "fa-folder-tree text-amber-500"
+                            } text-sm`} />
                           <span>{obj === "Job" ? "Job Requisitions" : obj === "Candidate" ? "Candidates & Applications" : "Security Profiles"}</span>
                         </td>
                         {["read", "create", "edit", "delete"].map((action) => {
@@ -336,6 +357,7 @@ export default function ProfileRecordPanel({
               </div>
             </div>
           )}
+
 
           {/* Tab 2: Field Settings (FLS) */}
           {activeTab === "fls" && (
@@ -360,6 +382,7 @@ export default function ProfileRecordPanel({
                   </select>
                 </div>
               </div>
+
 
               <div className="border border-slate-250 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm bg-slate-50/10">
                 <table className="w-full text-xs border-collapse">
@@ -404,6 +427,7 @@ export default function ProfileRecordPanel({
             </div>
           )}
 
+
           {/* Tab 3: System Permissions */}
           {activeTab === "system" && (
             <div className="space-y-4">
@@ -415,6 +439,7 @@ export default function ProfileRecordPanel({
                   Assign administrative administrative permissions to bypass object-level security.
                 </p>
               </div>
+
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-start gap-3 shadow-sm hover:border-slate-300 dark:hover:border-slate-700 transition-all">
@@ -436,6 +461,7 @@ export default function ProfileRecordPanel({
                     </p>
                   </div>
                 </div>
+
 
                 <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-start gap-3 shadow-sm hover:border-slate-300 dark:hover:border-slate-700 transition-all">
                   <div className="pt-0.5">
@@ -464,3 +490,6 @@ export default function ProfileRecordPanel({
     </div>
   );
 }
+
+
+

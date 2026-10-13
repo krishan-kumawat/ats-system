@@ -1,11 +1,13 @@
 "use client";
 
+
 import { useState, useEffect, useRef } from "react";
 import { Job, JobStatus, AuditEntry } from "@/lib/atsStore";
 import { createJobAction, updateJobAction } from "@/app/actions/jobs";
 import { fetchHiringManagerUsersAction, UserOption } from "@/app/actions/assignments";
 import { ROLE_META } from "@/lib/permissions";
 import { UserRole } from "@/lib/enums";
+
 
 interface AddJobModalProps {
   onClose: () => void;
@@ -23,12 +25,15 @@ interface AddJobModalProps {
   };
 }
 
+
 const DEPARTMENTS = ["Engineering", "Product", "Design", "Data", "Marketing", "Operations", "Finance", "HR"];
 const STATUS_OPTIONS: { value: JobStatus; label: string }[] = [
-  { value: "OPEN",    label: "Open"    },
-  { value: "DRAFT",   label: "Draft"   },
+  { value: "OPEN", label: "Open" },
+  { value: "DRAFT", label: "Draft" },
   { value: "ON_HOLD", label: "On Hold" },
+  { value: "CLOSED", label: "Closed" },
 ];
+
 
 export default function AddJobModal({
   onClose,
@@ -38,23 +43,25 @@ export default function AddJobModal({
   jobId,
   initialValues,
 }: AddJobModalProps) {
-  const [title, setTitle]               = useState(initialValues?.title || "");
-  const [department, setDepartment]     = useState(initialValues?.department || DEPARTMENTS[0]);
-  const [status, setStatus]             = useState<JobStatus>(initialValues?.status || "OPEN");
-  const [budget, setBudget]             = useState(initialValues?.budget || "");
-  const [saving, setSaving]             = useState(false);
+  const [title, setTitle] = useState(initialValues?.title || "");
+  const [department, setDepartment] = useState(initialValues?.department || DEPARTMENTS[0]);
+  const [status, setStatus] = useState<JobStatus>(initialValues?.status || "OPEN");
+  const [budget, setBudget] = useState(initialValues?.budget || "");
+  const [saving, setSaving] = useState(false);
+
 
   // Combobox state
-  const [hmUsers, setHmUsers]           = useState<UserOption[]>([]);
-  const [loadingHM, setLoadingHM]       = useState(true);
-  const [hmQuery, setHmQuery]           = useState(initialValues?.hiringManagerName || "");
-  const [hmOpen, setHmOpen]             = useState(false);
-  const [selectedHM, setSelectedHM]     = useState<UserOption | null>(
+  const [hmUsers, setHmUsers] = useState<UserOption[]>([]);
+  const [loadingHM, setLoadingHM] = useState(true);
+  const [hmQuery, setHmQuery] = useState(initialValues?.hiringManagerName || "");
+  const [hmOpen, setHmOpen] = useState(false);
+  const [selectedHM, setSelectedHM] = useState<UserOption | null>(
     initialValues?.hiringManagerId && initialValues?.hiringManagerName
       ? { id: initialValues.hiringManagerId, name: initialValues.hiringManagerName, email: "", role: UserRole.HIRING_MANAGER }
       : null
   );
-  const comboRef                        = useRef<HTMLDivElement>(null);
+  const comboRef = useRef<HTMLDivElement>(null);
+
 
   useEffect(() => {
     fetchHiringManagerUsersAction().then((users) => {
@@ -72,6 +79,7 @@ export default function AddJobModal({
     });
   }, [initialValues?.hiringManagerName]);
 
+
   useEffect(() => {
     if (initialValues?.hiringManagerId && initialValues?.hiringManagerName && !selectedHM) {
       setSelectedHM({
@@ -84,6 +92,7 @@ export default function AddJobModal({
     }
   }, [initialValues?.hiringManagerId, initialValues?.hiringManagerName]);
 
+
   // Close dropdown on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -95,16 +104,19 @@ export default function AddJobModal({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+
   const filteredHM = hmUsers.filter((u) =>
     !hmQuery || u.name.toLowerCase().includes(hmQuery.toLowerCase()) ||
     u.email.toLowerCase().includes(hmQuery.toLowerCase())
   );
+
 
   function selectHM(u: UserOption) {
     setSelectedHM(u);
     setHmQuery(u.name);
     setHmOpen(false);
   }
+
 
   async function handleSave() {
     if (!title.trim()) {
@@ -116,7 +128,9 @@ export default function AddJobModal({
       return;
     }
 
+
     setSaving(true);
+
 
     if (mode === "edit") {
       const result = await updateJobAction(jobId!, {
@@ -125,8 +139,9 @@ export default function AddJobModal({
         hiringManager: selectedHM.name,
         hiringManagerId: selectedHM.id,
         status,
-        budgetLimit: parseInt(budget) || 120000,
+        budgetLimit: budget ? parseInt(budget) : 0,
       });
+
 
       if (result.error) {
         onToast("Error", result.error, "ban");
@@ -134,14 +149,16 @@ export default function AddJobModal({
         return;
       }
 
+
       const job = result.job!;
       const audit: AuditEntry = {
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         user: "System",
         action: "EDITED_JOB",
         target: `${job.id} (${job.title})`,
-        notes: `Job requisition updated. Department: ${department}. HM: ${selectedHM.name}. Budget: $${(parseInt(budget) || 120000).toLocaleString("en-US")}.`,
+        notes: `Job requisition updated. Department: ${department}. HM: ${selectedHM.name}. Budget: $${(budget ? parseInt(budget) : 0).toLocaleString("en-US")}.`,
       };
+
 
       onSave(job, audit);
       onToast("Job Updated", `"${title.trim()}" has been updated.`, "briefcase");
@@ -154,8 +171,9 @@ export default function AddJobModal({
         hiringManager: selectedHM.name,
         hiringManagerId: selectedHM.id,
         status,
-        budgetLimit: parseInt(budget) || 120000,
+        budgetLimit: budget ? parseInt(budget) : 0,
       });
+
 
       if (result.error) {
         onToast("Error", result.error, "ban");
@@ -163,14 +181,16 @@ export default function AddJobModal({
         return;
       }
 
+
       const job = result.job;
       const audit: AuditEntry = {
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         user: "System",
         action: "CREATED_JOB",
         target: `${job.id} (${job.title})`,
-        notes: `Job requisition created. Department: ${department}. HM: ${selectedHM.name}. Budget: $${(parseInt(budget) || 120000).toLocaleString("en-US")}.`,
+        notes: `Job requisition created. Department: ${department}. HM: ${selectedHM.name}. Budget: $${(budget ? parseInt(budget) : 0).toLocaleString("en-US")}.`,
       };
+
 
       onSave(job, audit);
       onToast("Job Created", `"${title.trim()}" has been added to active requisitions.`, "briefcase");
@@ -179,9 +199,11 @@ export default function AddJobModal({
     }
   }
 
+
   return (
     <div className="fixed inset-0 bg-slate-950/40 dark:bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col transition-colors duration-200">
+
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between rounded-t-2xl">
@@ -198,8 +220,10 @@ export default function AddJobModal({
           </button>
         </div>
 
+
         {/* Body */}
         <div className="p-6 space-y-4">
+
 
           {/* Title */}
           <div>
@@ -214,6 +238,7 @@ export default function AddJobModal({
               className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
             />
           </div>
+
 
           {/* Department + Status */}
           <div className="grid grid-cols-2 gap-4">
@@ -239,12 +264,14 @@ export default function AddJobModal({
             </div>
           </div>
 
+
           {/* Hiring Manager combobox + Budget */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                 Hiring Manager <span className="text-red-500">*</span>
               </label>
+
 
               {loadingHM ? (
                 <div className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-400 flex items-center gap-2">
@@ -253,7 +280,7 @@ export default function AddJobModal({
                 </div>
               ) : hmUsers.length === 0 ? (
                 <div className="w-full bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg px-3 py-2.5 text-xs text-amber-600 dark:text-amber-400">
-                  No hiring managers found in DB
+                  No hiring managers found
                 </div>
               ) : (
                 <div className="relative" ref={comboRef}>
@@ -279,6 +306,7 @@ export default function AddJobModal({
                       <i className={`fa-solid fa-chevron-${hmOpen ? "up" : "down"} text-[10px]`} />
                     </button>
                   </div>
+
 
                   {/* Dropdown list */}
                   {hmOpen && (
@@ -315,6 +343,7 @@ export default function AddJobModal({
                 </div>
               )}
 
+
               {/* Selected user pill */}
               {selectedHM && (
                 <div className="mt-1.5 flex items-center gap-1.5">
@@ -323,6 +352,7 @@ export default function AddJobModal({
                 </div>
               )}
             </div>
+
 
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
@@ -341,17 +371,19 @@ export default function AddJobModal({
             </div>
           </div>
 
+
           {/* Preview */}
           {title && selectedHM && (
             <div className="bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/50 rounded-xl p-4">
               <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-500 dark:text-indigo-400 mb-2">Preview</p>
               <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{title}</p>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                {department} &middot; HM: {selectedHM.name} &middot; Budget: ${(parseInt(budget) || 120000).toLocaleString("en-US")}
+                {department} &middot; HM: {selectedHM.name} &middot; Budget: ${(budget ? parseInt(budget) : 0).toLocaleString("en-US")}
               </p>
             </div>
           )}
         </div>
+
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3 bg-slate-50 dark:bg-slate-950 rounded-b-2xl">
@@ -381,3 +413,6 @@ export default function AddJobModal({
     </div>
   );
 }
+
+
+

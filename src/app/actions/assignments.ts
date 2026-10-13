@@ -1,12 +1,15 @@
 "use server";
 
+
 import { revalidatePath } from "next/cache";
 import { UserRole } from "@/lib/enums";
 import { getSession } from "@/lib/auth";
 import { createUserAction } from "./users";
+import { API_BASE_URL } from "@/lib/api";
+
 
 export interface AssignmentRow {
-  id: string; // Map to `${jobId}::${assignedToId}`
+  id: string; // Map to `jobId::{assignedToId}`
   jobId: string;
   jobTitle: string;
   department: string;
@@ -18,6 +21,7 @@ export interface AssignmentRow {
   note: string;
   assignedAt: string;
 }
+
 
 export interface AssignJobInput {
   jobId: string;
@@ -31,12 +35,14 @@ export interface AssignJobInput {
   note?: string;
 }
 
+
 export interface UserOption {
   id: string;
   name: string;
   email: string;
   role: UserRole;
 }
+
 
 // Map profile name to UserRole enum
 function mapProfileToRole(profileName: string): UserRole {
@@ -47,30 +53,36 @@ function mapProfileToRole(profileName: string): UserRole {
   return UserRole.READ_ONLY;
 }
 
+
 // ─── Fetch all assignments ────────────────────────────────────────────────────
+
 
 export async function fetchAssignmentsAction(): Promise<AssignmentRow[]> {
   const session = await getSession();
   if (!session || !session.accessToken) return [];
+
 
   try {
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
     };
 
+
     // 1. Fetch all jobs
-    const jobsRes = await fetch("http://localhost:3000/api/v1/jobs", { headers });
+    const jobsRes = await fetch(`${API_BASE_URL}/api/v1/jobs`, { headers });
     if (!jobsRes.ok) return [];
     const jobs = await jobsRes.json();
     console.log("JOBS DATA: ", jobs);
 
+
     const rows: AssignmentRow[] = [];
+
 
     // 2. For each job, fetch collaborators from backend sharing API (simulated as Account type)
     const promises = jobs.map(async (job: any) => {
       try {
         const shareRes = await fetch(
-          `http://localhost:3000/api/v1/sharing/collaborators?recordId=${job.id}&objectType=Account`,
+          `${API_BASE_URL}/api/v1/sharing/collaborators?recordId=${job.id}&objectType=Account`,
           { headers }
         );
         if (shareRes.ok) {
@@ -98,7 +110,9 @@ export async function fetchAssignmentsAction(): Promise<AssignmentRow[]> {
       }
     });
 
+
     await Promise.all(promises);
+
 
     return rows;
   } catch (err) {
@@ -107,23 +121,29 @@ export async function fetchAssignmentsAction(): Promise<AssignmentRow[]> {
   }
 }
 
+
 // ─── Fetch all users eligible to be assigned (everyone except Founder/Admin) ──
+
 
 export async function fetchAssignableUsersAction(): Promise<UserOption[]> {
   const session = await getSession();
   if (!session || !session.accessToken) return [];
 
+
   try {
-    const response = await fetch("http://localhost:3000/api/v1/users?limit=200", {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users?limit=200`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
       },
     });
 
+
     if (!response.ok) return [];
+
 
     const result = await response.json();
     const users = result.data || [];
+
 
     return users
       .filter((u: any) => (u.profile?.name || "").toLowerCase() !== "admin")
@@ -140,23 +160,29 @@ export async function fetchAssignableUsersAction(): Promise<UserOption[]> {
   }
 }
 
+
 // ─── Fetch users who can act as Hiring Manager (HIRING_MANAGER) ───────────────
+
 
 export async function fetchHiringManagerUsersAction(): Promise<UserOption[]> {
   const session = await getSession();
   if (!session || !session.accessToken) return [];
 
+
   try {
-    const response = await fetch("http://localhost:3000/api/v1/users?limit=200&profile=Hiring Manager", {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users?limit=200&profile=Hiring Manager`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
       },
     });
 
+
     if (!response.ok) return [];
+
 
     const result = await response.json();
     const users = result.data || [];
+
 
     return users
       .map((u: any) => ({
@@ -172,7 +198,9 @@ export async function fetchHiringManagerUsersAction(): Promise<UserOption[]> {
   }
 }
 
+
 // ─── Reassign a specific applicant's Hiring Manager (Admin only) ─────────────
+
 
 export async function reassignApplicantHMAction(
   applicationId: string,
@@ -184,17 +212,20 @@ export async function reassignApplicantHMAction(
     return { error: "Only Admin can reassign hiring managers." };
   }
 
+
   try {
     const [candidateId] = applicationId.split("::");
     if (!candidateId) throw new Error("Invalid application structure.");
+
 
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
       "Content-Type": "application/json",
     };
 
+
     // Reassigning is mapped to giving the Hiring Manager access to the record (simulated as Account type)
-    const res = await fetch("http://localhost:3000/api/v1/sharing/share", {
+    const res = await fetch(`${API_BASE_URL}/api/v1/sharing/share`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -205,10 +236,12 @@ export async function reassignApplicantHMAction(
       }),
     });
 
+
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData.message || "Failed to share candidate record.");
     }
+
 
     revalidatePath("/");
     return {};
@@ -218,7 +251,9 @@ export async function reassignApplicantHMAction(
   }
 }
 
+
 // ─── Assign job ───────────────────────────────────────────────────────────────
+
 
 export async function assignJobAction(
   input: AssignJobInput
@@ -229,12 +264,15 @@ export async function assignJobAction(
     return { error: "Only Admin can assign job requisitions." };
   }
 
+
   try {
     let assignedToId = input.assignedToId;
+
 
     // Create user if they don't exist
     if (!assignedToId) {
       if (!input.newUser) throw new Error("Provide either assignedToId or newUser details.");
+
 
       const createUserRes = await createUserAction({
         name: input.newUser.name,
@@ -244,21 +282,25 @@ export async function assignJobAction(
         roleName: input.newUser.role,
       });
 
+
       if (createUserRes.error) {
         throw new Error(createUserRes.error);
       }
       assignedToId = createUserRes.user?.id;
     }
 
+
     if (!assignedToId) throw new Error("Failed to resolve user ID for assignment.");
+
 
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
       "Content-Type": "application/json",
     };
 
+
     // Call manual sharing API to share this Job with the assigned user
-    const res = await fetch("http://localhost:3000/api/v1/sharing/share", {
+    const res = await fetch(`${API_BASE_URL}/api/v1/sharing/share`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -269,10 +311,12 @@ export async function assignJobAction(
       }),
     });
 
+
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData.message || "Failed to create share rule on backend.");
     }
+
 
     revalidatePath("/");
     return {};
@@ -282,7 +326,9 @@ export async function assignJobAction(
   }
 }
 
+
 // ─── Revoke assignment ────────────────────────────────────────────────────────
+
 
 export async function revokeAssignmentAction(
   assignmentId: string
@@ -293,28 +339,33 @@ export async function revokeAssignmentAction(
     return { error: "Only Admin can revoke assignments." };
   }
 
+
   try {
     const [jobId, targetUserId] = assignmentId.split("::");
     if (!jobId || !targetUserId) throw new Error("Invalid assignment ID structure.");
+
 
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
       "Content-Type": "application/json",
     };
 
+
     // Call DELETE sharing API
     const revokeRes = await fetch(
-      `http://localhost:3000/api/v1/sharing/share?recordId=${jobId}&objectType=Account&targetUserId=${targetUserId}`,
+      `${API_BASE_URL}/api/v1/sharing/share?recordId=${jobId}&objectType=Account&targetUserId=${targetUserId}`,
       {
         method: "DELETE",
         headers,
       }
     );
 
+
     if (!revokeRes.ok) {
       const errData = await revokeRes.json().catch(() => ({}));
       throw new Error(errData.message || "Failed to revoke share on backend.");
     }
+
 
     revalidatePath("/");
     return {};
@@ -323,3 +374,6 @@ export async function revokeAssignmentAction(
     return { error: err instanceof Error ? err.message : "Failed to revoke assignment." };
   }
 }
+
+
+

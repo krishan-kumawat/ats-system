@@ -1,12 +1,16 @@
 "use server";
 
+
 import { getSession } from "@/lib/auth";
+import { API_BASE_URL } from "@/lib/api";
+
 
 export async function fetchRecordAccessAction(recordId: string, objectType: string) {
   const session = await getSession();
   if (!session) throw new Error("Unauthorized");
 
-  const res = await fetch(`http://localhost:3000/api/v1/sharing/record-access?recordId=${recordId}&objectType=${objectType}`, {
+
+  const res = await fetch(`${API_BASE_URL}/api/v1/sharing/record-access?recordId=${recordId}&objectType=${objectType}`, {
     headers: { Authorization: `Bearer ${session.accessToken}` },
     cache: "no-store",
   });
@@ -14,17 +18,20 @@ export async function fetchRecordAccessAction(recordId: string, objectType: stri
   return res.json();
 }
 
+
 export async function fetchCollaboratorsAction(recordId: string, objectType: string) {
   const session = await getSession();
   if (!session) throw new Error("Unauthorized");
 
-  const res = await fetch(`http://localhost:3000/api/v1/sharing/collaborators?recordId=${recordId}&objectType=${objectType}`, {
+
+  const res = await fetch(`${API_BASE_URL}/api/v1/sharing/collaborators?recordId=${recordId}&objectType=${objectType}`, {
     headers: { Authorization: `Bearer ${session.accessToken}` },
     cache: "no-store",
   });
   if (!res.ok) throw new Error("Failed to load collaborators.");
   return res.json();
 }
+
 
 export async function addManualShareAction(
   recordId: string,
@@ -35,7 +42,8 @@ export async function addManualShareAction(
   const session = await getSession();
   if (!session) throw new Error("Unauthorized");
 
-  const res = await fetch(`http://localhost:3000/api/v1/sharing/share`, {
+
+  const res = await fetch(`${API_BASE_URL}/api/v1/sharing/share`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
@@ -48,17 +56,19 @@ export async function addManualShareAction(
     try {
       const errJson = await res.json();
       msg = errJson.message || msg;
-    } catch (_) {}
+    } catch (_) { }
     throw new Error(msg);
   }
   return res.json();
 }
 
+
 export async function removeManualShareAction(recordId: string, objectType: string, targetUserId: string) {
   const session = await getSession();
   if (!session) throw new Error("Unauthorized");
 
-  const res = await fetch(`http://localhost:3000/api/v1/sharing/share?recordId=${recordId}&objectType=${objectType}&targetUserId=${targetUserId}`, {
+
+  const res = await fetch(`${API_BASE_URL}/api/v1/sharing/share?recordId=${recordId}&objectType=${objectType}&targetUserId=${targetUserId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${session.accessToken}` },
   });
@@ -66,12 +76,14 @@ export async function removeManualShareAction(recordId: string, objectType: stri
   return { success: true };
 }
 
+
 export async function fetchOwdAction() {
   const session = await getSession();
   if (!session) return { unauthorized: true };
 
+
   try {
-    const res = await fetch("http://localhost:3000/api/v1/sharing/owd", {
+    const res = await fetch(`${API_BASE_URL}/api/v1/sharing/owd`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
       cache: "no-store",
     });
@@ -86,6 +98,7 @@ export async function fetchOwdAction() {
   }
 }
 
+
 export async function updateOwdAction(input: {
   schemaObjectId: string;
   defaultAccessLevel: "PRIVATE" | "READ_ONLY" | "READ_WRITE";
@@ -94,8 +107,9 @@ export async function updateOwdAction(input: {
   const session = await getSession();
   if (!session) return { unauthorized: true };
 
+
   try {
-    const res = await fetch("http://localhost:3000/api/v1/sharing/owd", {
+    const res = await fetch(`${API_BASE_URL}/api/v1/sharing/owd`, {
       method: "PUT",
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
@@ -116,3 +130,6 @@ export async function updateOwdAction(input: {
     return { error: err.message || "Failed to update OWD settings" };
   }
 }
+
+
+

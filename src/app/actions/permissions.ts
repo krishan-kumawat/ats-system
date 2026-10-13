@@ -1,23 +1,27 @@
 "use server";
 
+
 import { revalidatePath } from "next/cache";
 import { UserRole } from "@/lib/enums";
 import { getSession, destroySession } from "@/lib/auth";
+import { API_BASE_URL } from "@/lib/api";
 import {
   PermissionSet,
   ALL_PERMISSIONS,
   BACKEND_PERM_MAP,
 } from "@/lib/permissions";
 
+
 export async function fetchProfilesAction(): Promise<{ profiles?: any[]; error?: string; unauthorized?: boolean }> {
   const session = await getSession();
   if (!session || !session.accessToken) return { unauthorized: true };
+
 
   try {
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
     };
-    const res = await fetch("http://localhost:3000/api/v1/profiles", { headers, cache: "no-store" });
+    const res = await fetch(`${API_BASE_URL}/api/v1/profiles`, { headers, cache: "no-store" });
     if (res.status === 401) {
       await destroySession();
       return { unauthorized: true };
@@ -32,6 +36,7 @@ export async function fetchProfilesAction(): Promise<{ profiles?: any[]; error?:
   }
 }
 
+
 export async function saveProfilePermissionsAction(
   profileId: string,
   permissions: PermissionSet
@@ -40,14 +45,16 @@ export async function saveProfilePermissionsAction(
   if (!session || !session.accessToken) return { unauthorized: true };
   if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can manage permissions." };
 
+
   try {
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
       "Content-Type": "application/json",
     };
 
+
     // 1. Fetch available backend permissions to map codes to IDs
-    const permsRes = await fetch("http://localhost:3000/api/v1/permissions", { headers, cache: "no-store" });
+    const permsRes = await fetch(`${API_BASE_URL}/api/v1/permissions`, { headers, cache: "no-store" });
     if (permsRes.status === 401) {
       await destroySession();
       return { unauthorized: true };
@@ -65,6 +72,7 @@ export async function saveProfilePermissionsAction(
       }
     }
 
+
     // 2. Map UI selections to backend IDs
     const nextPermissionIds: string[] = [];
     for (const key of ALL_PERMISSIONS) {
@@ -79,12 +87,14 @@ export async function saveProfilePermissionsAction(
       }
     }
 
+
     // 3. POST to profile permissions endpoint
-    const saveRes = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}/permissions`, {
+    const saveRes = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/permissions`, {
       method: "POST",
       headers,
       body: JSON.stringify({ permissionIds: nextPermissionIds }),
     });
+
 
     if (saveRes.status === 401) {
       await destroySession();
@@ -95,15 +105,18 @@ export async function saveProfilePermissionsAction(
       throw new Error(errData.message || "Failed to update profile permissions on backend");
     }
 
+
     try {
       revalidatePath("/");
-    } catch {}
+    } catch { }
+
 
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Failed to save permissions." };
   }
 }
+
 
 export async function createProfileAndCloneAction(
   name: string,
@@ -114,59 +127,68 @@ export async function createProfileAndCloneAction(
   if (!session || !session.accessToken) return { unauthorized: true };
   if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can create profiles." };
 
+
   try {
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
       "Content-Type": "application/json",
     };
 
+
     // 1. Create Profile
-    const createRes = await fetch("http://localhost:3000/api/v1/profiles", {
+    const createRes = await fetch(`${API_BASE_URL}/api/v1/profiles`, {
       method: "POST",
       headers,
       body: JSON.stringify({ name, description }),
     });
+
 
     if (createRes.status === 401) {
       await destroySession();
       return { unauthorized: true };
     }
 
+
     if (!createRes.ok) {
       const errData = await createRes.json().catch(() => ({}));
       throw new Error(errData.message || "Failed to create profile on backend.");
     }
 
+
     const newProfile = await createRes.json();
+
 
     // 2. Clone permissions if requested
     if (cloneFromProfileId && newProfile.id) {
-      const profilesRes = await fetch("http://localhost:3000/api/v1/profiles", { headers, cache: "no-store" });
+      const profilesRes = await fetch(`${API_BASE_URL}/api/v1/profiles`, { headers, cache: "no-store" });
       if (profilesRes.ok) {
         const allProfiles = await profilesRes.json();
         const source = Array.isArray(allProfiles) ? allProfiles.find((p) => p.id === cloneFromProfileId) : null;
         if (source && source.profilePermissions) {
           const clonePermIds = source.profilePermissions.map((pp: any) => pp.permissionId).filter(Boolean);
           if (clonePermIds.length > 0) {
-            await fetch(`http://localhost:3000/api/v1/profiles/${newProfile.id}/permissions`, {
+            await fetch(`${API_BASE_URL}/api/v1/profiles/${newProfile.id}/permissions`, {
               method: "POST",
               headers,
               body: JSON.stringify({ permissionIds: clonePermIds }),
-            }).catch(() => {});
+            }).catch(() => { });
           }
         }
       }
     }
 
+
     try {
       revalidatePath("/");
-    } catch {}
+    } catch { }
+
 
     return { profile: newProfile };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Failed to create profile." };
   }
 }
+
 
 export async function cloneProfileAPIAction(
   profileId: string,
@@ -177,16 +199,18 @@ export async function cloneProfileAPIAction(
   if (!session || !session.accessToken) return { unauthorized: true };
   if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can clone profiles." };
 
+
   try {
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
       "Content-Type": "application/json",
     };
-    const res = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}/clone`, {
+    const res = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}/clone`, {
       method: "POST",
       headers,
       body: JSON.stringify({ name, description }),
     });
+
 
     if (res.status === 401) {
       await destroySession();
@@ -204,6 +228,7 @@ export async function cloneProfileAPIAction(
   }
 }
 
+
 export async function updateProfileAPIAction(
   profileId: string,
   name: string,
@@ -213,16 +238,18 @@ export async function updateProfileAPIAction(
   if (!session || !session.accessToken) return { unauthorized: true };
   if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can update profiles." };
 
+
   try {
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
       "Content-Type": "application/json",
     };
-    const res = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}`, {
+    const res = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({ name, description }),
     });
+
 
     if (res.status === 401) {
       await destroySession();
@@ -240,6 +267,7 @@ export async function updateProfileAPIAction(
   }
 }
 
+
 export async function deleteProfileAPIAction(
   profileId: string
 ): Promise<{ success?: boolean; error?: string; unauthorized?: boolean }> {
@@ -247,14 +275,16 @@ export async function deleteProfileAPIAction(
   if (!session || !session.accessToken) return { unauthorized: true };
   if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can delete profiles." };
 
+
   try {
     const headers = {
       Authorization: `Bearer ${session.accessToken}`,
     };
-    const res = await fetch(`http://localhost:3000/api/v1/profiles/${profileId}`, {
+    const res = await fetch(`${API_BASE_URL}/api/v1/profiles/${profileId}`, {
       method: "DELETE",
       headers,
     });
+
 
     if (res.status === 401) {
       await destroySession();
@@ -270,3 +300,6 @@ export async function deleteProfileAPIAction(
     return { error: err instanceof Error ? err.message : "Failed to delete profile." };
   }
 }
+
+
+

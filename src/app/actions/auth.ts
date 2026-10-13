@@ -1,12 +1,16 @@
 "use server";
 
+
 import { redirect } from "next/navigation";
 import { createSession, destroySession } from "@/lib/auth";
 import { UserRole } from "@/lib/enums";
+import { API_BASE_URL } from "@/lib/api";
+
 
 export interface LoginState {
   error: string | null;
 }
+
 
 function mapProfileToRole(profileName: string): UserRole {
   const norm = (profileName || "").toLowerCase().replace(/[\s_-]+/g, "");
@@ -16,6 +20,7 @@ function mapProfileToRole(profileName: string): UserRole {
   if (norm.includes("readonly") || norm.includes("read")) return UserRole.READ_ONLY;
   return UserRole.READ_ONLY;
 }
+
 
 function decodeJwt(token: string): any {
   const parts = token.split(".");
@@ -34,6 +39,7 @@ function decodeJwt(token: string): any {
   return JSON.parse(jsonPayload);
 }
 
+
 export async function loginAction(
   _prev: LoginState,
   formData: FormData
@@ -41,14 +47,16 @@ export async function loginAction(
   const email = (formData.get("email") as string | null)?.trim().toLowerCase();
   const password = formData.get("password") as string | null;
 
+
   if (!email || !password) {
     return { error: "Email and password are required." };
   }
 
+
   let shouldRedirect = false;
-  
+
   try {
-    const response = await fetch("http://localhost:3000/api/v1/auth/login", {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -56,14 +64,20 @@ export async function loginAction(
       body: JSON.stringify({ email, password }),
     });
 
+
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
-      return { error: errData.message || "Invalid email or password." };
+      const message = Array.isArray(errData.message)
+        ? errData.message.join(", ")
+        : (errData.message || "Invalid email or password.");
+      return { error: message };
+
     }
+
 
     const { accessToken } = await response.json();
     const decoded = decodeJwt(accessToken);
-    
+
     // Map decoded JWT payload to SessionPayload
     const payload = {
       id: decoded.sub,
@@ -73,6 +87,7 @@ export async function loginAction(
       accessToken,
     };
 
+
     await createSession(payload);
     shouldRedirect = true;
   } catch (err: any) {
@@ -80,14 +95,20 @@ export async function loginAction(
     return { error: "Authentication service is temporarily unavailable. Please try again later." };
   }
 
+
   if (shouldRedirect) {
     redirect("/");
   }
 
+
   return { error: "Invalid email or password." };
 }
+
 
 export async function logoutAction(): Promise<void> {
   await destroySession();
   redirect("/login");
 }
+
+
+

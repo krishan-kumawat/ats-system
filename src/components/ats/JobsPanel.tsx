@@ -1,8 +1,10 @@
 "use client";
 
+
 import { useState } from "react";
 import { Job, JobStatus, Candidate, AuditEntry } from "@/lib/atsStore";
-import AddJobModal from "@/components/ats/AddJobModal";
+import CreateJobModal from "@/components/ats/CreateJobModal";
+
 
 interface JobsPanelProps {
   jobs: Job[];
@@ -12,42 +14,50 @@ interface JobsPanelProps {
   onToast: (title: string, msg: string, icon?: string) => void;
 }
 
+
 const STATUS_CONFIG: Record<JobStatus, { label: string; dot: string; badge: string }> = {
-  OPEN:    { label: "Open",    dot: "bg-emerald-500", badge: "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400" },
-  DRAFT:   { label: "Draft",   dot: "bg-slate-400",   badge: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400" },
-  ON_HOLD: { label: "On Hold", dot: "bg-amber-500",   badge: "bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400" },
-  CLOSED:  { label: "Closed",  dot: "bg-red-500",     badge: "bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-400" },
+  OPEN: { label: "Open", dot: "bg-emerald-500", badge: "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400" },
+  DRAFT: { label: "Draft", dot: "bg-slate-400", badge: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400" },
+  ON_HOLD: { label: "On Hold", dot: "bg-amber-500", badge: "bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400" },
+  CLOSED: { label: "Closed", dot: "bg-red-500", badge: "bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-400" },
 };
+
 
 const STAGE_CONFIG: Record<string, { bg: string; text: string }> = {
-  Applied:      { bg: "bg-slate-100 dark:bg-slate-800",   text: "text-slate-600 dark:text-slate-400" },
-  Screening:    { bg: "bg-blue-100 dark:bg-blue-950",     text: "text-blue-700 dark:text-blue-400" },
+  Applied: { bg: "bg-slate-100 dark:bg-slate-800", text: "text-slate-600 dark:text-slate-400" },
+  Screening: { bg: "bg-blue-100 dark:bg-blue-950", text: "text-blue-700 dark:text-blue-400" },
   Interviewing: { bg: "bg-indigo-100 dark:bg-indigo-950", text: "text-indigo-700 dark:text-indigo-400" },
-  Offer:        { bg: "bg-amber-100 dark:bg-amber-950",   text: "text-amber-700 dark:text-amber-400" },
+  Offer: { bg: "bg-amber-100 dark:bg-amber-950", text: "text-amber-700 dark:text-amber-400" },
 };
 
+
 const APPROVAL_CONFIG: Record<string, { label: string; cls: string }> = {
-  NONE:     { label: "—",        cls: "text-slate-400 dark:text-slate-600" },
-  PENDING:  { label: "Pending",  cls: "text-amber-600 dark:text-amber-400" },
+  NONE: { label: "—", cls: "text-slate-400 dark:text-slate-600" },
+  PENDING: { label: "Pending", cls: "text-amber-600 dark:text-amber-400" },
   APPROVED: { label: "Approved", cls: "text-emerald-600 dark:text-emerald-400" },
   REJECTED: { label: "Rejected", cls: "text-red-600 dark:text-red-400" },
 };
+
 
 export default function JobsPanel({ jobs, candidates, canAddJob, onJobAdd, onToast }: JobsPanelProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<JobStatus | "ALL">("ALL");
 
+
   const selectedJob = selectedJobId ? jobs.find((j) => j.id === selectedJobId) ?? null : null;
   const jobApplications = selectedJob
     ? candidates.filter((c) => c.jobId === selectedJob.id)
     : [];
 
+
   const filteredJobs = filterStatus === "ALL" ? jobs : jobs.filter((j) => j.status === filterStatus);
+
 
   function getAppCount(jobId: string) {
     return candidates.filter((c) => c.jobId === jobId).length;
   }
+
 
   if (selectedJob) {
     return (
@@ -59,8 +69,10 @@ export default function JobsPanel({ jobs, candidates, canAddJob, onJobAdd, onToa
     );
   }
 
+
   return (
     <div className="flex flex-col h-full gap-5">
+
 
       {/* Toolbar */}
       <div className="flex items-center justify-between flex-shrink-0">
@@ -73,6 +85,7 @@ export default function JobsPanel({ jobs, candidates, canAddJob, onJobAdd, onToa
           </p>
         </div>
 
+
         <div className="flex items-center gap-3">
           {/* Status filter */}
           <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-1">
@@ -80,16 +93,16 @@ export default function JobsPanel({ jobs, candidates, canAddJob, onJobAdd, onToa
               <button
                 key={s}
                 onClick={() => setFilterStatus(s)}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                  filterStatus === s
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${filterStatus === s
                     ? "bg-indigo-600 text-white"
                     : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                }`}
+                  }`}
               >
                 {s === "ALL" ? "All" : s === "ON_HOLD" ? "On Hold" : s.charAt(0) + s.slice(1).toLowerCase()}
               </button>
             ))}
           </div>
+
 
           {canAddJob && (
             <button
@@ -97,10 +110,11 @@ export default function JobsPanel({ jobs, candidates, canAddJob, onJobAdd, onToa
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-lg shadow-indigo-500/20 transition-all"
             >
               <i className="fa-solid fa-plus" />
-              <span>Add Job</span>
+              <span>Create New Jobs</span>
             </button>
           )}        </div>
       </div>
+
 
       {/* Stats row */}
       <div className="grid grid-cols-4 gap-3 flex-shrink-0">
@@ -121,6 +135,7 @@ export default function JobsPanel({ jobs, candidates, canAddJob, onJobAdd, onToa
         })}
       </div>
 
+
       {/* Jobs table */}
       <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden flex flex-col">
         <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 grid grid-cols-12 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
@@ -132,6 +147,7 @@ export default function JobsPanel({ jobs, candidates, canAddJob, onJobAdd, onToa
           <span className="col-span-1 text-center">Status</span>
           <span className="col-span-1 text-center">View</span>
         </div>
+
 
         <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
           {filteredJobs.length === 0 ? (
@@ -162,11 +178,10 @@ export default function JobsPanel({ jobs, candidates, canAddJob, onJobAdd, onToa
                     <span className="text-xs text-slate-600 dark:text-slate-400">{job.hiringManager}</span>
                   </div>
                   <div className="col-span-1 text-center">
-                    <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
-                      appCount > 0
+                    <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${appCount > 0
                         ? "bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400"
                         : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-500"
-                    }`}>
+                      }`}>
                       {appCount}
                     </span>
                   </div>
@@ -195,8 +210,9 @@ export default function JobsPanel({ jobs, candidates, canAddJob, onJobAdd, onToa
         </div>
       </div>
 
+
       {showAddModal && (
-        <AddJobModal
+        <CreateJobModal
           onClose={() => setShowAddModal(false)}
           onSave={onJobAdd}
           onToast={onToast}
@@ -206,7 +222,9 @@ export default function JobsPanel({ jobs, candidates, canAddJob, onJobAdd, onToa
   );
 }
 
+
 // ─── Applications view ────────────────────────────────────────────────────────
+
 
 function ApplicationsView({
   job,
@@ -219,13 +237,16 @@ function ApplicationsView({
 }) {
   const cfg = STATUS_CONFIG[job.status];
 
+
   const stageCounts = applications.reduce<Record<string, number>>((acc, c) => {
     acc[c.stage] = (acc[c.stage] ?? 0) + 1;
     return acc;
   }, {});
 
+
   return (
     <div className="flex flex-col h-full gap-5">
+
 
       {/* Back + header */}
       <div className="flex items-start justify-between flex-shrink-0">
@@ -252,6 +273,7 @@ function ApplicationsView({
         </div>
       </div>
 
+
       {/* Stage summary pills */}
       <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
         <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mr-1">
@@ -272,6 +294,7 @@ function ApplicationsView({
         </span>
       </div>
 
+
       {/* Applications table */}
       <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden flex flex-col">
         <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 grid grid-cols-12 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
@@ -283,6 +306,7 @@ function ApplicationsView({
           <span className="col-span-1 text-center">Offer</span>
           <span className="col-span-1 text-center">Approval</span>
         </div>
+
 
         <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
           {applications.length === 0 ? (
@@ -353,3 +377,6 @@ function ApplicationsView({
     </div>
   );
 }
+
+
+

@@ -1,5 +1,6 @@
 "use client";
 
+
 import { useState, useEffect, useTransition, useRef } from "react";
 import { fetchApplicantsAction, Applicant } from "@/app/actions/data";
 import {
@@ -12,26 +13,30 @@ import { UserRole } from "@/lib/enums";
 import { Job } from "@/lib/atsStore";
 import { SessionPayload } from "@/lib/auth-config";
 
+
 const STAGE_COLORS: Record<string, string> = {
-  Applied:      "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400",
-  Screening:    "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400",
+  Applied: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400",
+  Screening: "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400",
   Interviewing: "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400",
-  Offer:        "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400",
+  Offer: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400",
 };
 
+
 const REC_COLORS: Record<string, string> = {
-  STRONG_HIRE:    "text-emerald-600 dark:text-emerald-400",
-  HIRE:           "text-blue-600 dark:text-blue-400",
-  NO_HIRE:        "text-amber-600 dark:text-amber-400",
+  STRONG_HIRE: "text-emerald-600 dark:text-emerald-400",
+  HIRE: "text-blue-600 dark:text-blue-400",
+  NO_HIRE: "text-amber-600 dark:text-amber-400",
   STRONG_NO_HIRE: "text-red-600 dark:text-red-400",
 };
 
+
 const REC_LABELS: Record<string, string> = {
-  STRONG_HIRE:    "Strong Hire",
-  HIRE:           "Hire",
-  NO_HIRE:        "No Hire",
+  STRONG_HIRE: "Strong Hire",
+  HIRE: "Hire",
+  NO_HIRE: "No Hire",
   STRONG_NO_HIRE: "Strong No Hire",
 };
+
 
 interface ApplicantsPanelProps {
   jobs: Job[];
@@ -40,7 +45,9 @@ interface ApplicantsPanelProps {
   onToast: (title: string, msg: string, icon?: string) => void;
 }
 
+
 // ─── Change HM Modal ──────────────────────────────────────────────────────────
+
 
 interface ChangeHMModalProps {
   applicant: Applicant;
@@ -50,12 +57,14 @@ interface ChangeHMModalProps {
   onToast: (title: string, msg: string, icon?: string) => void;
 }
 
+
 function ChangeHMModal({ applicant, hmUsers, onClose, onSaved, onToast }: ChangeHMModalProps) {
-  const [query, setQuery]               = useState("");
-  const [selected, setSelected]         = useState<UserOption | null>(null);
-  const [open, setOpen]                 = useState(false);
-  const [saving, setSaving]             = useState(false);
-  const comboRef                        = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<UserOption | null>(null);
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const comboRef = useRef<HTMLDivElement>(null);
+
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -65,12 +74,14 @@ function ChangeHMModal({ applicant, hmUsers, onClose, onSaved, onToast }: Change
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+
   const filtered = hmUsers.filter(
     (u) =>
       !query ||
       u.name.toLowerCase().includes(query.toLowerCase()) ||
       u.email.toLowerCase().includes(query.toLowerCase())
   );
+
 
   async function handleSave() {
     if (!selected) {
@@ -89,9 +100,11 @@ function ChangeHMModal({ applicant, hmUsers, onClose, onSaved, onToast }: Change
     onClose();
   }
 
+
   return (
     <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+
 
         {/* Header */}
         <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
@@ -105,6 +118,7 @@ function ChangeHMModal({ applicant, hmUsers, onClose, onSaved, onToast }: Change
             <i className="fa-solid fa-xmark" />
           </button>
         </div>
+
 
         <div className="p-5 space-y-4">
           {/* Applicant summary */}
@@ -123,6 +137,7 @@ function ChangeHMModal({ applicant, hmUsers, onClose, onSaved, onToast }: Change
               <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">{applicant.hiringManager || "—"}</p>
             </div>
           </div>
+
 
           {/* HM combobox */}
           <div>
@@ -187,6 +202,7 @@ function ChangeHMModal({ applicant, hmUsers, onClose, onSaved, onToast }: Change
           </div>
         </div>
 
+
         {/* Footer */}
         <div className="px-5 py-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3 bg-slate-50 dark:bg-slate-950">
           <button onClick={onClose} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all">
@@ -209,19 +225,23 @@ function ChangeHMModal({ applicant, hmUsers, onClose, onSaved, onToast }: Change
   );
 }
 
+
 // ─── Main Panel ───────────────────────────────────────────────────────────────
+
 
 export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }: ApplicantsPanelProps) {
   const [selectedJobId, setSelectedJobId] = useState<string>("all");
-  const [applicants, setApplicants]       = useState<Applicant[]>([]);
-  const [search, setSearch]               = useState("");
-  const [stageFilter, setStageFilter]     = useState<string>("all");
-  const [isPending, startTransition]      = useTransition();
-  const [hmUsers, setHmUsers]             = useState<UserOption[]>([]);
+  const [applicants, setApplicants] = useState<Applicant[]>([]);
+  const [search, setSearch] = useState("");
+  const [stageFilter, setStageFilter] = useState<string>("all");
+  const [isPending, startTransition] = useTransition();
+  const [hmUsers, setHmUsers] = useState<UserOption[]>([]);
   const [changeHMTarget, setChangeHMTarget] = useState<Applicant | null>(null);
+
 
   const canChangeHM =
     user.role === UserRole.ADMIN;
+
 
   // Fetch HM users once for the modal (only if allowed)
   useEffect(() => {
@@ -229,6 +249,7 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
       fetchHiringManagerUsersAction().then(setHmUsers);
     }
   }, [canChangeHM]);
+
 
   // Reload applicants whenever job filter changes
   useEffect(() => {
@@ -240,6 +261,7 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
     });
   }, [selectedJobId]);
 
+
   function handleHMSaved(applicationId: string, hm: UserOption) {
     setApplicants((prev) =>
       prev.map((a) =>
@@ -249,6 +271,7 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
       )
     );
   }
+
 
   const filtered = applicants.filter((a) => {
     const matchSearch =
@@ -260,11 +283,14 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
     return matchSearch && matchStage;
   });
 
+
   const stages = ["all", "Applied", "Screening", "Interviewing", "Offer"];
+
 
   return (
     <>
       <div className="flex flex-col h-full gap-4">
+
 
         {/* Header */}
         <div className="flex items-start justify-between flex-shrink-0 flex-wrap gap-3">
@@ -277,6 +303,7 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
               {isPending ? "Loading…" : `${filtered.length} applicant${filtered.length !== 1 ? "s" : ""} found`}
             </p>
           </div>
+
 
           <div className="flex items-center gap-2 flex-wrap">
             {/* Job filter */}
@@ -295,6 +322,7 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
               <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] pointer-events-none" />
             </div>
 
+
             {/* Search */}
             <div className="relative">
               <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
@@ -309,6 +337,7 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
           </div>
         </div>
 
+
         {/* Stage pills */}
         <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
           {stages.map((s) => {
@@ -317,11 +346,10 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
               <button
                 key={s}
                 onClick={() => setStageFilter(s)}
-                className={`px-3 py-1 text-[11px] font-semibold rounded-lg border transition-all ${
-                  stageFilter === s
+                className={`px-3 py-1 text-[11px] font-semibold rounded-lg border transition-all ${stageFilter === s
                     ? "bg-indigo-600 border-indigo-600 text-white shadow-sm shadow-indigo-500/20"
                     : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600"
-                }`}
+                  }`}
               >
                 {s === "all" ? "All Stages" : s}
                 <span className={`ml-1.5 ${stageFilter === s ? "text-indigo-200" : "text-slate-400 dark:text-slate-500"}`}>{count}</span>
@@ -330,12 +358,13 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
           })}
         </div>
 
+
         {/* Table */}
         <div className="flex-1 overflow-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
           {isPending ? (
             <div className="flex items-center justify-center h-40 gap-3 text-slate-400 dark:text-slate-500">
               <i className="fa-solid fa-circle-notch fa-spin text-lg text-indigo-500" />
-              <span className="text-sm">Fetching from database…</span>
+              <span className="text-sm">Loading applicants…</span>
             </div>
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 gap-2 text-slate-400 dark:text-slate-500">
@@ -361,6 +390,7 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
                 {filtered.map((a) => (
                   <tr key={a.applicationId} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group">
 
+
                     {/* Candidate */}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
@@ -376,11 +406,13 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
                       </div>
                     </td>
 
+
                     {/* Job */}
                     <td className="px-4 py-3 hidden sm:table-cell">
                       <p className="font-medium text-slate-700 dark:text-slate-300 truncate max-w-[160px]">{a.jobTitle || "—"}</p>
                       <p className="text-[11px] text-slate-400">{a.department}</p>
                     </td>
+
 
                     {/* Stage */}
                     <td className="px-4 py-3">
@@ -388,6 +420,7 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
                         {a.stage}
                       </span>
                     </td>
+
 
                     {/* Hiring Manager */}
                     <td className="px-4 py-3 hidden md:table-cell">
@@ -412,6 +445,7 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
                       </div>
                     </td>
 
+
                     {/* Skills */}
                     <td className="px-4 py-3 hidden lg:table-cell">
                       <div className="flex flex-wrap gap-1 max-w-[180px]">
@@ -424,12 +458,14 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
                       </div>
                     </td>
 
+
                     {/* Salary */}
                     <td className="px-4 py-3 hidden lg:table-cell">
                       <span className="font-medium text-slate-700 dark:text-slate-300">
                         {a.expectedSalary ? `$${a.expectedSalary.toLocaleString("en-US")}` : "—"}
                       </span>
                     </td>
+
 
                     {/* Recommendation */}
                     <td className="px-4 py-3 hidden xl:table-cell">
@@ -442,10 +478,12 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
                       )}
                     </td>
 
+
                     {/* Applied */}
                     <td className="px-4 py-3 hidden xl:table-cell">
                       <span className="text-slate-400 dark:text-slate-500">{a.appliedAt || "—"}</span>
                     </td>
+
 
                     {/* Actions */}
                     <td className="px-4 py-3 text-right">
@@ -475,6 +513,7 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
         </div>
       </div>
 
+
       {/* Change HM Modal */}
       {changeHMTarget && (
         <ChangeHMModal
@@ -488,3 +527,6 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
     </>
   );
 }
+
+
+

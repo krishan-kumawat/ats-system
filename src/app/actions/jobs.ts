@@ -1,8 +1,11 @@
 "use server";
 
+
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { Job, JobStatus } from "@/lib/atsStore";
+import { API_BASE_URL } from "@/lib/api";
+
 
 export interface CreateJobInput {
   title: string;
@@ -13,9 +16,43 @@ export interface CreateJobInput {
   budgetLimit: number;
 }
 
-export async function createJobAction(input: CreateJobInput): Promise<{ job: Job; error?: string }> {
+
+export interface DepartmentOption {
+  id: string;
+  name: string;
+}
+
+
+export async function fetchDepartmentsAction(): Promise<DepartmentOption[]> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return [];
+
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/v1/departments`, {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    if (!res.ok) return [];
+    const departments = await res.json();
+    return Array.isArray(departments)
+      ? departments.map((d: any) => ({ id: d.id, name: d.name }))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+
+export async function createJobSimpleAction(input: {
+  title: string;
+  description: string;
+  departmentId?: string;
+  status?: JobStatus;
+  budgetLimit?: number;
+}): Promise<{ job: Job; error?: string }> {
   const session = await getSession();
   if (!session || !session.accessToken) return { job: {} as Job, error: "Unauthorized" };
+
 
   try {
     const headers = {
@@ -23,8 +60,87 @@ export async function createJobAction(input: CreateJobInput): Promise<{ job: Job
       "Content-Type": "application/json",
     };
 
+
+    const body: Record<string, unknown> = {
+      title: input.title,
+      description: input.description,
+    };
+    if (input.departmentId) {
+      body.departmentId = input.departmentId;
+    }
+    if (input.budgetLimit != null) {
+      body.budgetLimit = input.budgetLimit;
+    }
+
+
+    const res = await fetch(`${API_BASE_URL}/api/v1/jobs`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      return { job: {} as Job, error: errData.message || "Failed to create job." };
+    }
+
+
+    let createdJob = await res.json();
+
+
+    const targetStatus = input.status || "DRAFT";
+    const statusMap: Record<string, string> = { OPEN: "Open", DRAFT: "Draft", ON_HOLD: "On Hold", CLOSED: "Closed" };
+    const backendStatus = statusMap[targetStatus] || "Draft";
+    if (createdJob.status !== backendStatus) {
+      const updateRes = await fetch(`${API_BASE_URL}/api/v1/jobs/${createdJob.id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ status: backendStatus }),
+      });
+      if (updateRes.ok) {
+        createdJob = await updateRes.json();
+      }
+    }
+
+
+    revalidatePath("/");
+
+
+    return {
+      job: {
+        id: createdJob.id,
+        title: createdJob.title,
+        department: createdJob.department?.name || "",
+        hiringManager: createdJob.owner
+          ? `${createdJob.owner.firstName} ${createdJob.owner.lastName}`
+          : session.name || "System",
+        status: (createdJob.status || "DRAFT").toUpperCase().replace(/ /g, "_") as unknown as JobStatus,
+        budgetLimit: Number(createdJob.budgetLimit || 0),
+        createdAt: createdJob.createdAt ? String(createdJob.createdAt).slice(0, 10) : "",
+      },
+    };
+  } catch (err) {
+    console.error("[createJobSimpleAction]", err);
+    return { job: {} as Job, error: "Failed to create job. Please try again." };
+  }
+}
+
+
+export async function createJobAction(input: CreateJobInput): Promise<{ job: Job; error?: string }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { job: {} as Job, error: "Unauthorized" };
+
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
+
+
     // 1. Resolve or Create Department on Backend
-    const deptRes = await fetch("http://localhost:3000/api/v1/departments", {
+    const deptRes = await fetch(`${API_BASE_URL}/api/v1/departments`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
     const departments = deptRes.ok ? await deptRes.json() : [];
@@ -32,9 +148,10 @@ export async function createJobAction(input: CreateJobInput): Promise<{ job: Job
       (d: any) => d.name.toLowerCase() === input.department.toLowerCase()
     );
 
+
     if (!dept && input.department.trim()) {
       const code = input.department.trim().toUpperCase().replace(/[\s_-]+/g, "_");
-      const createDeptRes = await fetch("http://localhost:3000/api/v1/departments", {
+      const createDeptRes = await fetch(`${API_BASE_URL}/api/v1/departments`, {
         method: "POST",
         headers,
         body: JSON.stringify({ name: input.department.trim(), code }),
@@ -44,16 +161,22 @@ export async function createJobAction(input: CreateJobInput): Promise<{ job: Job
       }
     }
 
-    // 2. Create Job on PostgreSQL Backend
-    const createJobRes = await fetch("http://localhost:3000/api/v1/jobs", {
+
+    // 2. Create Job
+    const jobBody: Record<string, unknown> = {
+      title: input.title,
+      description: `Job posting for ${input.title} in ${input.department}.`,
+      departmentId: dept?.id || undefined,
+    };
+    if (input.budgetLimit != null) {
+      jobBody.budgetLimit = input.budgetLimit;
+    }
+    const createJobRes = await fetch(`${API_BASE_URL}/api/v1/jobs`, {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        title: input.title,
-        description: `Job posting for ${input.title} in ${input.department}.`,
-        departmentId: dept?.id || undefined,
-      }),
+      body: JSON.stringify(jobBody),
     });
+
 
     if (!createJobRes.ok) {
       const errData = await createJobRes.json().catch(() => ({}));
@@ -63,12 +186,15 @@ export async function createJobAction(input: CreateJobInput): Promise<{ job: Job
       };
     }
 
+
     let createdJob = await createJobRes.json();
 
+
     // 3. Update status if it differs from the default ('Draft')
-    const targetStatus = input.status === "OPEN" ? "Open" : input.status === "CLOSED" ? "Closed" : "Draft";
+    const statusMap: Record<string, string> = { OPEN: "Open", DRAFT: "Draft", ON_HOLD: "On Hold", CLOSED: "Closed" };
+    const targetStatus = statusMap[input.status] || "Draft";
     if (createdJob.status !== targetStatus) {
-      const updateJobRes = await fetch(`http://localhost:3000/api/v1/jobs/${createdJob.id}`, {
+      const updateJobRes = await fetch(`${API_BASE_URL}/api/v1/jobs/${createdJob.id}`, {
         method: "PATCH",
         headers,
         body: JSON.stringify({ status: targetStatus }),
@@ -78,7 +204,9 @@ export async function createJobAction(input: CreateJobInput): Promise<{ job: Job
       }
     }
 
+
     revalidatePath("/");
+
 
     return {
       job: {
@@ -86,8 +214,8 @@ export async function createJobAction(input: CreateJobInput): Promise<{ job: Job
         title: createdJob.title,
         department: dept?.name || input.department,
         hiringManager: session.name || "System Admin",
-        status: createdJob.status.toUpperCase() as unknown as JobStatus,
-        budgetLimit: input.budgetLimit,
+        status: (createdJob.status || "DRAFT").toUpperCase().replace(/ /g, "_") as JobStatus,
+        budgetLimit: Number(createdJob.budgetLimit || input.budgetLimit || 0),
         createdAt: createdJob.createdAt ? String(createdJob.createdAt).slice(0, 10) : "",
       },
     };
@@ -97,9 +225,11 @@ export async function createJobAction(input: CreateJobInput): Promise<{ job: Job
   }
 }
 
+
 export async function updateJobAction(jobId: string, input: CreateJobInput): Promise<{ job?: Job; error?: string }> {
   const session = await getSession();
   if (!session || !session.accessToken) return { error: "Unauthorized" };
+
 
   try {
     const headers = {
@@ -107,8 +237,9 @@ export async function updateJobAction(jobId: string, input: CreateJobInput): Pro
       "Content-Type": "application/json",
     };
 
+
     // 1. Resolve or Create Department on Backend
-    const deptRes = await fetch("http://localhost:3000/api/v1/departments", {
+    const deptRes = await fetch(`${API_BASE_URL}/api/v1/departments`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
     const departments = deptRes.ok ? await deptRes.json() : [];
@@ -116,9 +247,10 @@ export async function updateJobAction(jobId: string, input: CreateJobInput): Pro
       (d: any) => d.name.toLowerCase() === input.department.toLowerCase()
     );
 
+
     if (!dept && input.department.trim()) {
       const code = input.department.trim().toUpperCase().replace(/[\s_-]+/g, "_");
-      const createDeptRes = await fetch("http://localhost:3000/api/v1/departments", {
+      const createDeptRes = await fetch(`${API_BASE_URL}/api/v1/departments`, {
         method: "POST",
         headers,
         body: JSON.stringify({ name: input.department.trim(), code }),
@@ -128,26 +260,36 @@ export async function updateJobAction(jobId: string, input: CreateJobInput): Pro
       }
     }
 
-    const targetStatus = input.status === "OPEN" ? "Open" : input.status === "CLOSED" ? "Closed" : "Draft";
+
+    const statusMap2: Record<string, string> = { OPEN: "Open", DRAFT: "Draft", ON_HOLD: "On Hold", CLOSED: "Closed" };
+    const targetStatus = statusMap2[input.status] || "Draft";
+
 
     // 2. Update Job on Backend
-    const res = await fetch(`http://localhost:3000/api/v1/jobs/${jobId}`, {
+    const updateBody: Record<string, unknown> = {
+      title: input.title,
+      status: targetStatus,
+      departmentId: dept?.id || null,
+    };
+    if (input.budgetLimit != null) {
+      updateBody.budgetLimit = input.budgetLimit;
+    }
+    const res = await fetch(`${API_BASE_URL}/api/v1/jobs/${jobId}`, {
       method: "PATCH",
       headers,
-      body: JSON.stringify({
-        title: input.title,
-        status: targetStatus,
-        departmentId: dept?.id || null,
-      }),
+      body: JSON.stringify(updateBody),
     });
+
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       return { error: errData.message || "Failed to update job requisition." };
     }
 
+
     const updatedJob = await res.json();
     revalidatePath("/");
+
 
     return {
       job: {
@@ -155,8 +297,8 @@ export async function updateJobAction(jobId: string, input: CreateJobInput): Pro
         title: updatedJob.title,
         department: dept?.name || input.department,
         hiringManager: input.hiringManager,
-        status: updatedJob.status.toUpperCase() as unknown as JobStatus,
-        budgetLimit: input.budgetLimit,
+        status: (updatedJob.status || "DRAFT").toUpperCase().replace(/ /g, "_") as JobStatus,
+        budgetLimit: Number(updatedJob.budgetLimit || input.budgetLimit || 0),
         createdAt: updatedJob.createdAt ? String(updatedJob.createdAt).slice(0, 10) : "",
       },
     };
@@ -166,20 +308,78 @@ export async function updateJobAction(jobId: string, input: CreateJobInput): Pro
   }
 }
 
+
+export async function updateJobSimpleAction(
+  jobId: string,
+  input: { title: string; description: string; status: JobStatus; departmentId?: string; budgetLimit?: number }
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { success: false, error: "Unauthorized" };
+
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
+
+
+    const statusMap: Record<string, string> = { OPEN: "Open", DRAFT: "Draft", ON_HOLD: "On Hold", CLOSED: "Closed" };
+    const backendStatus = statusMap[input.status] || "Draft";
+
+
+    const body: Record<string, unknown> = {
+      title: input.title,
+      description: input.description,
+      status: backendStatus,
+    };
+    if (input.departmentId) {
+      body.departmentId = input.departmentId;
+    }
+    if (input.budgetLimit != null) {
+      body.budgetLimit = input.budgetLimit;
+    }
+
+
+    const res = await fetch(`${API_BASE_URL}/api/v1/jobs/${jobId}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(body),
+    });
+
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      return { success: false, error: errData.message || "Failed to update job." };
+    }
+
+
+    revalidatePath("/");
+    return { success: true };
+  } catch (err: any) {
+    console.error("[updateJobSimpleAction]", err);
+    return { success: false, error: err.message || "Failed to update job." };
+  }
+}
+
+
 export async function deleteJobAction(jobId: string): Promise<{ success: boolean; error?: string }> {
   const session = await getSession();
   if (!session || !session.accessToken) return { success: false, error: "Unauthorized" };
 
+
   try {
-    const res = await fetch(`http://localhost:3000/api/v1/jobs/${jobId}`, {
+    const res = await fetch(`${API_BASE_URL}/api/v1/jobs/${jobId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
+
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       return { success: false, error: errData.message || "Failed to delete job requisition." };
     }
+
 
     revalidatePath("/");
     return { success: true };
@@ -188,3 +388,6 @@ export async function deleteJobAction(jobId: string): Promise<{ success: boolean
     return { success: false, error: err.message || "Failed to delete job requisition." };
   }
 }
+
+
+

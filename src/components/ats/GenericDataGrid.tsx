@@ -1,15 +1,21 @@
 "use client";
 
+
 import React, { useEffect, useState } from "react";
 import { usePermissions, ObjectMetadata } from "@/context/PermissionsContext";
 import { fetchObjectRecordsAction } from "@/app/actions/data";
 import { deleteProfileAPIAction } from "@/app/actions/permissions";
 import { deleteUserAction } from "@/app/actions/users";
+import { deleteJobAction } from "@/app/actions/jobs";
+import CreateJobModal from "@/components/ats/CreateJobModal";
+import EditJobModal from "@/components/ats/EditJobModal";
+
 
 interface GenericDataGridProps {
   objectApiName: string;
   onRowClick?: (id: string) => void;
 }
+
 
 export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDataGridProps) {
   const { fetchMetadata } = usePermissions();
@@ -21,14 +27,45 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
   const [limit, setLimit] = useState(10);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
+  const [showCreateJobModal, setShowCreateJobModal] = useState(false);
+  const [editJobRecord, setEditJobRecord] = useState<any | null>(null);
+
+
+  const [toastMsg, setToastMsg] = useState<{ title: string; message: string; icon: string } | null>(null);
+
+
+  function showGridToast(title: string, msg: string, icon = "info") {
+    setToastMsg({ title, message: msg, icon });
+    setTimeout(() => setToastMsg(null), 3000);
+  }
+
+
+  async function reloadRecords() {
+    try {
+      const res = await fetchObjectRecordsAction(objectApiName, page, limit, search);
+      let data = res.data;
+      let tot = res.total;
+      if (search && objectApiName === "Job") {
+        data = data.filter((r: any) => r.title && r.title.toLowerCase().includes(search.toLowerCase()));
+        tot = data.length;
+      }
+      setRecords(data);
+      setTotal(tot);
+    } catch { }
+  }
+
 
   const handleEdit = (recordId: string) => {
     if (objectApiName === "Profile") {
       window.location.href = `/setup/profiles/${recordId}`;
     } else if (objectApiName === "User") {
       window.location.href = `/setup/users/${recordId}`;
+    } else if (objectApiName === "Job") {
+      const record = records.find((r) => r.id === recordId);
+      if (record) setEditJobRecord(record);
     }
   };
+
 
   const handleDelete = async (recordId: string) => {
     if (!confirm("Are you sure you want to delete this record?")) return;
@@ -39,21 +76,27 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
       } else if (objectApiName === "User") {
         const res = await deleteUserAction(recordId);
         if (res.error) throw new Error(res.error);
+      } else if (objectApiName === "Job") {
+        const res = await deleteJobAction(recordId);
+        if (res.error) throw new Error(res.error);
       }
       setRecords((prev) => prev.filter((r) => r.id !== recordId));
+      showGridToast("Deleted", "Record has been deleted.", "trash-can");
     } catch (err: any) {
       alert(err.message || "Failed to delete record.");
     }
   };
 
+
   // 1. Fetch metadata and records
   useEffect(() => {
     let active = true;
 
+
     async function load() {
       setLoading(true);
       setError(null);
-      
+
       const meta = await fetchMetadata(objectApiName);
       if (!active) return;
       if (!meta) {
@@ -63,11 +106,13 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
       }
       setMetadata(meta);
 
+
       if (!meta.ols.allowRead) {
         setError("Access Denied: You do not have Read access for this object.");
         setLoading(false);
         return;
       }
+
 
       try {
         const res = await fetchObjectRecordsAction(objectApiName, page, limit, search);
@@ -87,11 +132,13 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
       }
     }
 
+
     load();
     return () => {
       active = false;
     };
   }, [objectApiName, page, limit, search]);
+
 
   if (loading && !metadata) {
     return (
@@ -101,6 +148,7 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
       </div>
     );
   }
+
 
   if (error) {
     return (
@@ -114,14 +162,17 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
     );
   }
 
+
   if (!metadata) return null;
+
 
   // Filter fields visible according to FLS allowRead
   const visibleFields = metadata.fields.filter((f) => f.allowRead);
 
+
   return (
     <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-900 p-6 space-y-6">
-      
+
       {/* Dynamic Header */}
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-5">
         <div>
@@ -136,14 +187,22 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
           </p>
         </div>
 
-        {/* Create New Button conditionally visible based on OLS allowCreate */}
+
         {metadata.ols.allowCreate && (
-          <button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]">
+          <button
+            onClick={() => {
+              if (objectApiName === "Job") {
+                setShowCreateJobModal(true);
+              }
+            }}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+          >
             <i className="fa-solid fa-plus text-xs" />
             <span>Create New {metadata.label}</span>
           </button>
         )}
       </div>
+
 
       {/* Search & Pagination Limit Toolbar */}
       <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-4 rounded-xl shadow-sm">
@@ -184,6 +243,7 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
         </div>
       </div>
 
+
       {/* Grid Table */}
       <div className={`bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm ${loading ? "opacity-60 pointer-events-none transition-opacity" : "transition-opacity"}`}>
         <div className="overflow-x-auto">
@@ -216,10 +276,30 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
                     {visibleFields.map((field) => {
                       let val = record[field.apiName];
 
-                      // Nested object handles (e.g. j.department.name)
-                      if (val && typeof val === "object") {
-                        val = val.name || val.label || JSON.stringify(val);
+
+                      // If field is a foreign-key ID (e.g. ownerId), resolve to the related object's display name
+                      if (typeof val === "string" && field.apiName.endsWith("Id")) {
+                        const relationKey = field.apiName.replace(/Id$/, "");
+                        const related = record[relationKey];
+                        if (related && typeof related === "object") {
+                          if (related.firstName || related.lastName) {
+                            val = `${related.firstName || ""} ${related.lastName || ""}`.trim();
+                          } else {
+                            val = related.name || related.label || val;
+                          }
+                        }
                       }
+
+
+                      // Nested object handles (e.g. j.department.name)
+                      if (val && typeof val === "object" && !Array.isArray(val)) {
+                        if (val.firstName || val.lastName) {
+                          val = `${val.firstName || ""} ${val.lastName || ""}`.trim();
+                        } else {
+                          val = val.name || val.label || JSON.stringify(val);
+                        }
+                      }
+
 
                       // Formatting Boolean / Array types
                       if (typeof val === "boolean") {
@@ -228,14 +308,17 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
                         val = val.join(", ");
                       }
 
+
                       const isLink =
                         (objectApiName === "Profile" && field.apiName === "name") ||
                         (objectApiName === "User" && field.apiName === "email") ||
                         (objectApiName === "Job" && field.apiName === "title") ||
                         (objectApiName === "Candidate" && field.apiName === "name");
 
+
                       const isProfileLink =
                         objectApiName === "User" && field.apiName === "profile";
+
 
                       return (
                         <td key={field.apiName} className="px-6 py-4.5 font-medium text-slate-700 dark:text-slate-350">
@@ -273,6 +356,7 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
                       );
                     })}
 
+
                     {/* Actions column based on OLS and record-level sharing access */}
                     {(metadata.ols.allowEdit || metadata.ols.allowDelete) && (
                       <td className="px-6 py-4.5 text-right space-x-3">
@@ -300,6 +384,7 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
             </tbody>
           </table>
         </div>
+
 
         {/* Pagination Toolbar */}
         <div className="bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-6 py-4.5 flex items-center justify-between text-xs">
@@ -330,6 +415,45 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
         </div>
       </div>
 
+
+      {showCreateJobModal && (
+        <CreateJobModal
+          onClose={() => setShowCreateJobModal(false)}
+          onSave={(_job, _audit) => {
+            reloadRecords();
+          }}
+          onToast={showGridToast}
+        />
+      )}
+
+
+      {editJobRecord && (
+        <EditJobModal
+          record={editJobRecord}
+          onClose={() => setEditJobRecord(null)}
+          onSaved={() => {
+            setEditJobRecord(null);
+            reloadRecords();
+          }}
+          onToast={showGridToast}
+        />
+      )}
+
+
+      {toastMsg && (
+        <div className="fixed bottom-6 right-6 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl px-5 py-3 flex items-center gap-3 animate-in slide-in-from-bottom-4">
+          <i className={`fa-solid fa-${toastMsg.icon} text-indigo-600 dark:text-indigo-400`} />
+          <div>
+            <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{toastMsg.title}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{toastMsg.message}</p>
+          </div>
+        </div>
+      )}
+
+
     </div>
   );
 }
+
+
+
