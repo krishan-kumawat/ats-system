@@ -190,6 +190,53 @@ export async function createProfileAndCloneAction(
 }
 
 
+export interface CreateProfileInput {
+  name: string;
+  description?: string;
+  sourceProfileId: string;
+  sourceProfileName?: string;
+}
+
+export async function createProfileAPIAction(
+  input: CreateProfileInput
+): Promise<{ profile?: any; error?: string; unauthorized?: boolean }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { unauthorized: true };
+  if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can create profiles." };
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
+    const res = await fetch(`${API_BASE_URL}/api/v1/profiles`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        name: input.name,
+        description: input.description,
+        sourceProfileId: input.sourceProfileId,
+        sourceProfileName: input.sourceProfileName,
+      }),
+    });
+
+    if (res.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || "Failed to create profile.");
+    }
+    const profile = await res.json();
+    revalidatePath("/");
+    return { profile };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Failed to create profile." };
+  }
+}
+
+
 export async function cloneProfileAPIAction(
   profileId: string,
   name: string,

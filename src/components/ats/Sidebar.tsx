@@ -11,8 +11,8 @@ interface SidebarProps {
   role: Role;
   userRole: UserRole;
   tab: string; // Changed to string to support dynamic tab strings
-  candidateCount: number;
-  jobCount: number;
+  candidateCount?: number;
+  jobCount?: number;
   permissions: {
     canViewJobs?: boolean;
     canViewCandidates?: boolean;
@@ -115,16 +115,6 @@ export default function Sidebar({
                       <i className={icon} />
                       <span>{tabItem.label}</span>
                     </span>
-                    {tabItem.apiName === "Job" && (
-                      <span className="bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-bold">
-                        {jobCount}
-                      </span>
-                    )}
-                    {tabItem.apiName === "Candidate" && (
-                      <span className="bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-bold">
-                        {candidateCount}
-                      </span>
-                    )}
                   </button>
                 );
               })

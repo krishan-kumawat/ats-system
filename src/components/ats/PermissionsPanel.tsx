@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   fetchProfilesAction,
+  createProfileAPIAction,
   cloneProfileAPIAction,
   updateProfileAPIAction,
   deleteProfileAPIAction,
@@ -47,6 +48,42 @@ export default function PermissionsPanel({
   const [profileDesc, setProfileDesc] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
 
+  // Source profile combobox state
+  const [selectedSourceProfile, setSelectedSourceProfile] = useState<any | null>(null);
+  const [sourceProfileQuery, setSourceProfileQuery] = useState("");
+  const [sourceProfileOpen, setSourceProfileOpen] = useState(false);
+  const [sourceProfileError, setSourceProfileError] = useState("");
+  const sourceProfileRef = useRef<HTMLDivElement>(null);
+
+  // Close source profile combobox on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (sourceProfileRef.current && !sourceProfileRef.current.contains(e.target as Node)) {
+        setSourceProfileOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredSourceProfiles = profiles.filter(
+    (p) =>
+      !sourceProfileQuery ||
+      p.name?.toLowerCase().includes(sourceProfileQuery.toLowerCase()) ||
+      p.description?.toLowerCase().includes(sourceProfileQuery.toLowerCase())
+  );
+
+  const resetCreateForm = useCallback(() => {
+    setIsCreating(false);
+    setCloneSourceProfile(null);
+    setSelectedSourceProfile(null);
+    setSourceProfileQuery("");
+    setSourceProfileError("");
+    setSourceProfileOpen(false);
+    setProfileName("");
+    setProfileDesc("");
+  }, []);
+
   const loadProfiles = useCallback(async (showSpinner = false) => {
     if (showSpinner) setLoading(true);
     const res = await fetchProfilesAction();
@@ -68,33 +105,32 @@ export default function PermissionsPanel({
 
   const handleCreateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profileName.trim()) {
+
+    const trimmedName = profileName.trim();
+    if (!trimmedName) {
       onToast("Validation Error", "Profile name is required.", "triangle-exclamation");
       return;
     }
 
-    setActionLoading(true);
-    // Directly create via standard cloning or empty creation
-    // We can use standard create endpoints or clone from existing
-    let res;
-    if (cloneSourceProfile) {
-      res = await cloneProfileAPIAction(cloneSourceProfile.id, profileName.trim(), profileDesc.trim());
-    } else {
-      // Custom endpoint to create profile
-      const session = await fetch("/api/v1/profiles", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: profileName.trim(), description: profileDesc.trim() }),
-      });
-      // We will handle via our actions instead
-      // Let's call clone from standard system profile if no source is selected
-      const standardSource = profiles.find((p) => !p.isCustom) || profiles[0];
-      if (standardSource) {
-        res = await cloneProfileAPIAction(standardSource.id, profileName.trim(), profileDesc.trim());
-      } else {
-        res = { error: "No standard baseline profile found to clone from." };
-      }
+    // Resolve source profile from selection or query match
+    const source =
+      selectedSourceProfile ||
+      profiles.find((p) => p.name?.toLowerCase().trim() === sourceProfileQuery.toLowerCase().trim());
+
+    if (!source) {
+      setSourceProfileError("Source profile is required.");
+      onToast("Validation Error", "Source profile is required. Please select an existing profile.", "triangle-exclamation");
+      return;
     }
+
+    setActionLoading(true);
+
+    const res = await createProfileAPIAction({
+      name: trimmedName,
+      description: profileDesc.trim() || undefined,
+      sourceProfileId: source.id,
+      sourceProfileName: source.name,
+    });
 
     if (res?.unauthorized) {
       window.location.href = "/login";
@@ -104,11 +140,15 @@ export default function PermissionsPanel({
     if (res?.error) {
       onToast("Operation Failed", res.error, "ban");
     } else {
-      onToast("Profile Created", `Profile '${profileName.trim()}' was successfully created.`, "circle-check");
-      setIsCreating(false);
-      setCloneSourceProfile(null);
-      setProfileName("");
-      setProfileDesc("");
+      onToast("Profile Created", `Profile '${trimmedName}' was successfully created from '${source.name}'.`, "circle-check");
+      onAuditLog({
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        user: "System",
+        action: "CREATED_PROFILE",
+        target: trimmedName,
+        notes: `Profile created with baseline cloned from ${source.name} (${source.id}).`,
+      });
+      resetCreateForm();
       await loadProfiles();
     }
     setActionLoading(false);
@@ -197,9 +237,7 @@ export default function PermissionsPanel({
         </div>
         <button
           onClick={() => {
-            setProfileName("");
-            setProfileDesc("");
-            setCloneSourceProfile(null);
+            resetCreateForm();
             setIsCreating(true);
           }}
           className="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-md shadow-indigo-500/25 transition-all flex items-center gap-1.5"
@@ -289,6 +327,10 @@ export default function PermissionsPanel({
                         setProfileName(p.name);
                         setProfileDesc(p.description || "");
                         setCloneSourceProfile(p);
+                        setSelectedSourceProfile(p);
+                        setSourceProfileQuery(p.name);
+                        setSourceProfileError("");
+                        setSourceProfileOpen(false);
                         setIsCreating(true);
                       }}
                       className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-900 rounded-lg transition-all"
@@ -335,22 +377,159 @@ export default function PermissionsPanel({
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-900 dark:text-white">
-                    {cloneSourceProfile ? `Clone Profile: ${cloneSourceProfile.name}` : "Create Security Profile"}
+                    {selectedSourceProfile ? `Clone Profile: ${selectedSourceProfile.name}` : "Create Security Profile"}
                   </h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Specify new metadata for the profile</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Specify source profile and metadata</p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setIsCreating(false)}
+                onClick={resetCreateForm}
                 className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <i className="fa-solid fa-xmark text-sm" />
               </button>
             </div>
             <div className="px-6 py-5 space-y-4">
+              {/* Source Profile Combobox (Required) */}
+              <div ref={sourceProfileRef} className="relative">
+                <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">
+                  Source Profile <span className="text-red-400">*</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-slate-400">
+                    <i className="fa-solid fa-shield-halved text-xs" />
+                  </div>
+                  <input
+                    type="text"
+                    value={sourceProfileQuery}
+                    onFocus={() => {
+                      setSourceProfileOpen(true);
+                      setSourceProfileError("");
+                    }}
+                    onChange={(e) => {
+                      setSourceProfileQuery(e.target.value);
+                      if (selectedSourceProfile && e.target.value !== selectedSourceProfile.name) {
+                        setSelectedSourceProfile(null);
+                      }
+                      setSourceProfileOpen(true);
+                      setSourceProfileError("");
+                    }}
+                    placeholder="Search existing profile to clone from..."
+                    className={`w-full bg-slate-50 dark:bg-slate-950 border ${
+                      sourceProfileError
+                        ? "border-red-400 dark:border-red-500 ring-1 ring-red-400"
+                        : "border-slate-200 dark:border-slate-800"
+                    } rounded-xl pl-8 pr-16 py-2 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                  />
+                  <div className="absolute inset-y-0 right-2 flex items-center gap-1">
+                    {selectedSourceProfile && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedSourceProfile(null);
+                          setSourceProfileQuery("");
+                          setSourceProfileOpen(true);
+                        }}
+                        className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors"
+                        title="Clear selection"
+                      >
+                        <i className="fa-solid fa-xmark text-xs" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setSourceProfileOpen((o) => !o)}
+                      className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                    >
+                      <i className={`fa-solid fa-chevron-${sourceProfileOpen ? "up" : "down"} text-[10px]`} />
+                    </button>
+                  </div>
+                </div>
+
+                {sourceProfileError && (
+                  <p className="mt-1 text-xs text-red-500 flex items-center gap-1">
+                    <i className="fa-solid fa-circle-exclamation text-[10px]" />
+                    {sourceProfileError}
+                  </p>
+                )}
+
+                {/* Combobox Dropdown */}
+                {sourceProfileOpen && (
+                  <ul className="absolute z-30 mt-1 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl overflow-hidden max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
+                    {filteredSourceProfiles.length === 0 ? (
+                      <li className="px-3 py-3 text-xs text-slate-400 text-center">
+                        {sourceProfileQuery ? `No profiles matching "${sourceProfileQuery}"` : "No profiles available"}
+                      </li>
+                    ) : (
+                      filteredSourceProfiles.map((p) => {
+                        const isSelected = selectedSourceProfile?.id === p.id;
+                        return (
+                          <li key={p.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedSourceProfile(p);
+                                setSourceProfileQuery(p.name);
+                                setSourceProfileOpen(false);
+                                setSourceProfileError("");
+                              }}
+                              className={`w-full text-left px-3 py-2.5 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors flex items-center justify-between gap-2.5 ${
+                                isSelected ? "bg-indigo-50 dark:bg-indigo-950/40" : ""
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center flex-shrink-0">
+                                  <i className="fa-solid fa-shield-halved text-xs" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                                      {p.name}
+                                    </span>
+                                    <span
+                                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                                        p.isCustom
+                                          ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200/50"
+                                          : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200/50"
+                                      }`}
+                                    >
+                                      {p.isCustom ? "Custom" : "Standard"}
+                                    </span>
+                                  </div>
+                                  {p.description && (
+                                    <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-[260px]">
+                                      {p.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              {isSelected && (
+                                <i className="fa-solid fa-check text-indigo-600 dark:text-indigo-400 text-xs flex-shrink-0" />
+                              )}
+                            </button>
+                          </li>
+                        );
+                      })
+                    )}
+                  </ul>
+                )}
+
+                {/* Selected helper banner */}
+                {selectedSourceProfile && (
+                  <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">
+                    <i className="fa-solid fa-circle-check text-[10px]" />
+                    <span>
+                      Permissions will be cloned from <strong>{selectedSourceProfile.name}</strong>
+                    </span>
+                  </div>
+                )}
+              </div>
+
               <div>
-                <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Profile Name <span className="text-red-400">*</span></label>
+                <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">
+                  Profile Name <span className="text-red-400">*</span>
+                </label>
                 <input
                   type="text"
                   value={profileName}
@@ -374,7 +553,7 @@ export default function PermissionsPanel({
             <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2 bg-slate-50/80 dark:bg-slate-950">
               <button
                 type="button"
-                onClick={() => setIsCreating(false)}
+                onClick={resetCreateForm}
                 className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
               >
                 Cancel

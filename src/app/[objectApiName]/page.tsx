@@ -53,7 +53,16 @@ export default async function DynamicObjectPage({ params }: PageProps) {
   }
 
 
-  const initialData = await fetchInitialData();
+  // Eagerly fetch pipeline & analytics datasets only for pages that actively consume them
+  const lowerName = objectApiName.toLowerCase();
+  const needsEagerData = lowerName === "candidate" || lowerName === "candidates" || lowerName === "analytics";
+  const initialData = needsEagerData
+    ? await fetchInitialData()
+    : {
+        candidates: [],
+        jobs: [],
+        auditLogs: [],
+      };
 
 
   return (
