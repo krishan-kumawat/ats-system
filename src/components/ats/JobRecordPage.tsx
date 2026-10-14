@@ -647,12 +647,13 @@ export default function JobRecordPage({
           mode="edit"
           jobId={jobId}
           initialValues={{
-            title: job.title || "",
-            department: job.department?.name || job.department || "",
-            status: (job.status || "DRAFT").toUpperCase().replace(/ /g, "_") as JobStatus,
-            budget: job.budgetLimit ? String(job.budgetLimit) : "",
-            hiringManagerName: fullJob?.owner ? `${fullJob.owner.firstName} ${fullJob.owner.lastName}` : job.hiringManager || "",
-            hiringManagerId: fullJob?.ownerId || "",
+            title: fullJob?.title || job.title || "",
+            department: fullJob?.department?.name || (typeof fullJob?.department === "string" ? fullJob.department : "") || job.department?.name || (typeof job.department === "string" ? job.department : "") || "",
+            departmentId: fullJob?.departmentId || fullJob?.department?.id || job.departmentId || "",
+            status: (fullJob?.status || job.status || "DRAFT").toUpperCase().replace(/ /g, "_") as JobStatus,
+            budget: (fullJob?.budgetLimit != null ? fullJob.budgetLimit : fullJob?.budget != null ? fullJob.budget : job.budgetLimit != null ? job.budgetLimit : "") !== "" ? String(fullJob?.budgetLimit ?? fullJob?.budget ?? job.budgetLimit ?? "") : "",
+            hiringManagerName: fullJob?.owner ? `${fullJob.owner.firstName || ""} ${fullJob.owner.lastName || ""}`.trim() : job.hiringManager || "",
+            hiringManagerId: fullJob?.ownerId || fullJob?.owner?.id || job.hiringManagerId || "",
           }}
           onClose={() => setShowEditModal(false)}
           onSave={handleEditSave}
@@ -665,12 +666,13 @@ export default function JobRecordPage({
         <AddJobModal
           mode="clone"
           initialValues={{
-            title: job.title ? `Clone of ${job.title}` : "",
-            department: job.department?.name || job.department || "",
-            status: (job.status || "DRAFT").toUpperCase().replace(/ /g, "_") as JobStatus,
-            budget: job.budgetLimit ? String(job.budgetLimit) : "",
-            hiringManagerName: fullJob?.owner ? `${fullJob.owner.firstName} ${fullJob.owner.lastName}` : job.hiringManager || "",
-            hiringManagerId: fullJob?.ownerId || "",
+            title: (fullJob?.title || job.title) ? `Clone of ${fullJob?.title || job.title}` : "",
+            department: fullJob?.department?.name || (typeof fullJob?.department === "string" ? fullJob.department : "") || job.department?.name || (typeof job.department === "string" ? job.department : "") || "",
+            departmentId: fullJob?.departmentId || fullJob?.department?.id || job.departmentId || "",
+            status: (fullJob?.status || job.status || "DRAFT").toUpperCase().replace(/ /g, "_") as JobStatus,
+            budget: (fullJob?.budgetLimit != null ? fullJob.budgetLimit : fullJob?.budget != null ? fullJob.budget : job.budgetLimit != null ? job.budgetLimit : "") !== "" ? String(fullJob?.budgetLimit ?? fullJob?.budget ?? job.budgetLimit ?? "") : "",
+            hiringManagerName: fullJob?.owner ? `${fullJob.owner.firstName || ""} ${fullJob.owner.lastName || ""}`.trim() : job.hiringManager || "",
+            hiringManagerId: fullJob?.ownerId || fullJob?.owner?.id || job.hiringManagerId || "",
           }}
           onClose={() => setShowCloneModal(false)}
           onSave={handleCloneSave}

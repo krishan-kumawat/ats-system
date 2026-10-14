@@ -168,28 +168,24 @@ export async function fetchHiringManagerUsersAction(): Promise<UserOption[]> {
   const session = await getSession();
   if (!session || !session.accessToken) return [];
 
-
   try {
-    const response = await fetch(`${API_BASE_URL}/api/v1/users?limit=200&profile=Hiring Manager`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users?limit=200`, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
       },
     });
 
-
     if (!response.ok) return [];
 
-
     const result = await response.json();
-    const users = result.data || [];
-
+    const users = Array.isArray(result) ? result : (result.data || []);
 
     return users
       .map((u: any) => ({
         id: u.id,
         name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
         email: u.email,
-        role: UserRole.HIRING_MANAGER,
+        role: mapProfileToRole(u.profile?.name),
       }))
       .sort((a: UserOption, b: UserOption) => a.name.localeCompare(b.name));
   } catch (err) {
@@ -197,6 +193,41 @@ export async function fetchHiringManagerUsersAction(): Promise<UserOption[]> {
     return [];
   }
 }
+
+
+// ─── Fetch all users (for user select comboboxes) ──────────────────────────────
+
+
+export async function fetchAllUsersAction(): Promise<UserOption[]> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return [];
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users?limit=200`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+    });
+
+    if (!response.ok) return [];
+
+    const result = await response.json();
+    const users = Array.isArray(result) ? result : (result.data || []);
+
+    return users
+      .map((u: any) => ({
+        id: u.id,
+        name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
+        email: u.email,
+        role: mapProfileToRole(u.profile?.name),
+      }))
+      .sort((a: UserOption, b: UserOption) => a.name.localeCompare(b.name));
+  } catch (err) {
+    console.error("[fetchAllUsersAction]", err);
+    return [];
+  }
+}
+
 
 
 // ─── Reassign a specific applicant's Hiring Manager (Admin only) ─────────────

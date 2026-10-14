@@ -10,6 +10,7 @@ import { API_BASE_URL } from "@/lib/api";
 export interface CreateJobInput {
   title: string;
   department: string;
+  departmentId?: string;
   hiringManager: string;
   hiringManagerId?: string;
   status: JobStatus;
@@ -47,6 +48,9 @@ export async function createJobSimpleAction(input: {
   title: string;
   description: string;
   departmentId?: string;
+  departmentName?: string;
+  ownerId?: string;
+  hiringManager?: string;
   status?: JobStatus;
   budgetLimit?: number;
 }): Promise<{ job: Job; error?: string }> {
@@ -67,6 +71,9 @@ export async function createJobSimpleAction(input: {
     };
     if (input.departmentId) {
       body.departmentId = input.departmentId;
+    }
+    if (input.ownerId) {
+      body.ownerId = input.ownerId;
     }
     if (input.budgetLimit != null) {
       body.budgetLimit = input.budgetLimit;
@@ -92,11 +99,20 @@ export async function createJobSimpleAction(input: {
     const targetStatus = input.status || "DRAFT";
     const statusMap: Record<string, string> = { OPEN: "Open", DRAFT: "Draft", ON_HOLD: "On Hold", CLOSED: "Closed" };
     const backendStatus = statusMap[targetStatus] || "Draft";
+    
+    const patchBody: Record<string, unknown> = {};
     if (createdJob.status !== backendStatus) {
+      patchBody.status = backendStatus;
+    }
+    if (input.ownerId && createdJob.ownerId !== input.ownerId) {
+      patchBody.ownerId = input.ownerId;
+    }
+
+    if (Object.keys(patchBody).length > 0) {
       const updateRes = await fetch(`${API_BASE_URL}/api/v1/jobs/${createdJob.id}`, {
         method: "PATCH",
         headers,
-        body: JSON.stringify({ status: backendStatus }),
+        body: JSON.stringify(patchBody),
       });
       if (updateRes.ok) {
         createdJob = await updateRes.json();
@@ -111,10 +127,10 @@ export async function createJobSimpleAction(input: {
       job: {
         id: createdJob.id,
         title: createdJob.title,
-        department: createdJob.department?.name || "",
-        hiringManager: createdJob.owner
+        department: createdJob.department?.name || input.departmentName || "",
+        hiringManager: input.hiringManager || (createdJob.owner
           ? `${createdJob.owner.firstName} ${createdJob.owner.lastName}`
-          : session.name || "System",
+          : session.name || "System"),
         status: (createdJob.status || "DRAFT").toUpperCase().replace(/ /g, "_") as unknown as JobStatus,
         budgetLimit: Number(createdJob.budgetLimit || 0),
         createdAt: createdJob.createdAt ? String(createdJob.createdAt).slice(0, 10) : "",
@@ -166,8 +182,11 @@ export async function createJobAction(input: CreateJobInput): Promise<{ job: Job
     const jobBody: Record<string, unknown> = {
       title: input.title,
       description: `Job posting for ${input.title} in ${input.department}.`,
-      departmentId: dept?.id || undefined,
+      departmentId: input.departmentId || dept?.id || undefined,
     };
+    if (input.hiringManagerId) {
+      jobBody.ownerId = input.hiringManagerId;
+    }
     if (input.budgetLimit != null) {
       jobBody.budgetLimit = input.budgetLimit;
     }
@@ -190,14 +209,21 @@ export async function createJobAction(input: CreateJobInput): Promise<{ job: Job
     let createdJob = await createJobRes.json();
 
 
-    // 3. Update status if it differs from the default ('Draft')
-    const statusMap: Record<string, string> = { OPEN: "Open", DRAFT: "Draft", ON_HOLD: "On Hold", CLOSED: "Closed" };
+    // 3. Update status or owner if differs
+    const statusMap = { OPEN: "Open", DRAFT: "Draft", ON_HOLD: "On Hold", CLOSED: "Closed" };
     const targetStatus = statusMap[input.status] || "Draft";
+    const patchBody: Record<string, unknown> = {};
     if (createdJob.status !== targetStatus) {
+      patchBody.status = targetStatus;
+    }
+    if (input.hiringManagerId && createdJob.ownerId !== input.hiringManagerId) {
+      patchBody.ownerId = input.hiringManagerId;
+    }
+    if (Object.keys(patchBody).length > 0) {
       const updateJobRes = await fetch(`${API_BASE_URL}/api/v1/jobs/${createdJob.id}`, {
         method: "PATCH",
         headers,
-        body: JSON.stringify({ status: targetStatus }),
+        body: JSON.stringify(patchBody),
       });
       if (updateJobRes.ok) {
         createdJob = await updateJobRes.json();
@@ -213,7 +239,7 @@ export async function createJobAction(input: CreateJobInput): Promise<{ job: Job
         id: createdJob.id,
         title: createdJob.title,
         department: dept?.name || input.department,
-        hiringManager: session.name || "System Admin",
+        hiringManager: input.hiringManager || session.name || "System Admin",
         status: (createdJob.status || "DRAFT").toUpperCase().replace(/ /g, "_") as JobStatus,
         budgetLimit: Number(createdJob.budgetLimit || input.budgetLimit || 0),
         createdAt: createdJob.createdAt ? String(createdJob.createdAt).slice(0, 10) : "",
@@ -269,8 +295,11 @@ export async function updateJobAction(jobId: string, input: CreateJobInput): Pro
     const updateBody: Record<string, unknown> = {
       title: input.title,
       status: targetStatus,
-      departmentId: dept?.id || null,
+      departmentId: input.departmentId || dept?.id || null,
     };
+    if (input.hiringManagerId) {
+      updateBody.ownerId = input.hiringManagerId;
+    }
     if (input.budgetLimit != null) {
       updateBody.budgetLimit = input.budgetLimit;
     }
@@ -311,7 +340,14 @@ export async function updateJobAction(jobId: string, input: CreateJobInput): Pro
 
 export async function updateJobSimpleAction(
   jobId: string,
-  input: { title: string; description: string; status: JobStatus; departmentId?: string; budgetLimit?: number }
+  input: {
+    title: string;
+    description: string;
+    status: JobStatus;
+    departmentId?: string;
+    ownerId?: string;
+    budgetLimit?: number;
+  }
 ): Promise<{ success: boolean; error?: string }> {
   const session = await getSession();
   if (!session || !session.accessToken) return { success: false, error: "Unauthorized" };
@@ -335,6 +371,9 @@ export async function updateJobSimpleAction(
     };
     if (input.departmentId) {
       body.departmentId = input.departmentId;
+    }
+    if (input.ownerId) {
+      body.ownerId = input.ownerId;
     }
     if (input.budgetLimit != null) {
       body.budgetLimit = input.budgetLimit;

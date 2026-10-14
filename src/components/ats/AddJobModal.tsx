@@ -1,13 +1,11 @@
 "use client";
 
-
 import { useState, useEffect, useRef } from "react";
 import { Job, JobStatus, AuditEntry } from "@/lib/atsStore";
-import { createJobAction, updateJobAction } from "@/app/actions/jobs";
+import { createJobAction, updateJobAction, fetchDepartmentsAction, DepartmentOption } from "@/app/actions/jobs";
 import { fetchHiringManagerUsersAction, UserOption } from "@/app/actions/assignments";
 import { ROLE_META } from "@/lib/permissions";
 import { UserRole } from "@/lib/enums";
-
 
 interface AddJobModalProps {
   onClose: () => void;
@@ -18,6 +16,7 @@ interface AddJobModalProps {
   initialValues?: {
     title: string;
     department: string;
+    departmentId?: string;
     status: JobStatus;
     budget: string;
     hiringManagerName?: string;
@@ -25,15 +24,12 @@ interface AddJobModalProps {
   };
 }
 
-
-const DEPARTMENTS = ["Engineering", "Product", "Design", "Data", "Marketing", "Operations", "Finance", "HR"];
 const STATUS_OPTIONS: { value: JobStatus; label: string }[] = [
   { value: "OPEN", label: "Open" },
   { value: "DRAFT", label: "Draft" },
   { value: "ON_HOLD", label: "On Hold" },
   { value: "CLOSED", label: "Closed" },
 ];
-
 
 export default function AddJobModal({
   onClose,
@@ -44,13 +40,19 @@ export default function AddJobModal({
   initialValues,
 }: AddJobModalProps) {
   const [title, setTitle] = useState(initialValues?.title || "");
-  const [department, setDepartment] = useState(initialValues?.department || DEPARTMENTS[0]);
   const [status, setStatus] = useState<JobStatus>(initialValues?.status || "OPEN");
   const [budget, setBudget] = useState(initialValues?.budget || "");
   const [saving, setSaving] = useState(false);
 
+  // Department combobox state
+  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
+  const [loadingDepts, setLoadingDepts] = useState(true);
+  const [deptQuery, setDeptQuery] = useState(initialValues?.department || "");
+  const [deptOpen, setDeptOpen] = useState(false);
+  const [selectedDept, setSelectedDept] = useState<DepartmentOption | null>(null);
+  const deptComboRef = useRef<HTMLDivElement>(null);
 
-  // Combobox state
+  // Hiring Manager combobox state
   const [hmUsers, setHmUsers] = useState<UserOption[]>([]);
   const [loadingHM, setLoadingHM] = useState(true);
   const [hmQuery, setHmQuery] = useState(initialValues?.hiringManagerName || "");
@@ -60,56 +62,80 @@ export default function AddJobModal({
       ? { id: initialValues.hiringManagerId, name: initialValues.hiringManagerName, email: "", role: UserRole.HIRING_MANAGER }
       : null
   );
-  const comboRef = useRef<HTMLDivElement>(null);
+  const hmComboRef = useRef<HTMLDivElement>(null);
 
+  // Load departments
+  useEffect(() => {
+    fetchDepartmentsAction().then((depts) => {
+      setDepartments(depts);
+      setLoadingDepts(false);
+      const targetId = initialValues?.departmentId;
+      const targetName = initialValues?.department;
+      const matched = depts.find(
+        (d) => (targetId && d.id === targetId) || (targetName && d.name.toLowerCase() === targetName.toLowerCase())
+      );
+      if (matched) {
+        setSelectedDept(matched);
+        setDeptQuery(matched.name);
+      } else if (targetName) {
+        setDeptQuery(targetName);
+      }
+    });
+  }, [initialValues?.department, initialValues?.departmentId]);
 
+  // Load users for Hiring Manager
   useEffect(() => {
     fetchHiringManagerUsersAction().then((users) => {
       setHmUsers(users);
       setLoadingHM(false);
-      if (initialValues?.hiringManagerName && !selectedHM) {
-        const matched = users.find(
-          (u) => u.name.toLowerCase() === initialValues.hiringManagerName?.toLowerCase()
-        );
-        if (matched) {
-          setSelectedHM(matched);
-          setHmQuery(matched.name);
-        }
+      const targetId = initialValues?.hiringManagerId;
+      const targetName = initialValues?.hiringManagerName;
+      const matched = users.find(
+        (u) => (targetId && u.id === targetId) || (targetName && u.name.toLowerCase() === targetName.toLowerCase())
+      );
+      if (matched) {
+        setSelectedHM(matched);
+        setHmQuery(matched.name);
+      } else if (targetName) {
+        setHmQuery(targetName);
       }
     });
-  }, [initialValues?.hiringManagerName]);
-
+  }, [initialValues?.hiringManagerName, initialValues?.hiringManagerId]);
 
   useEffect(() => {
-    if (initialValues?.hiringManagerId && initialValues?.hiringManagerName && !selectedHM) {
-      setSelectedHM({
-        id: initialValues.hiringManagerId,
-        name: initialValues.hiringManagerName,
-        email: "",
-        role: UserRole.HIRING_MANAGER,
-      });
-      setHmQuery(initialValues.hiringManagerName);
-    }
-  }, [initialValues?.hiringManagerId, initialValues?.hiringManagerName]);
+    if (initialValues?.title) setTitle(initialValues.title);
+    if (initialValues?.status) setStatus(initialValues.status);
+    if (initialValues?.budget != null && initialValues.budget !== "") setBudget(String(initialValues.budget));
+  }, [initialValues?.title, initialValues?.status, initialValues?.budget]);
 
-
-  // Close dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (comboRef.current && !comboRef.current.contains(e.target as Node)) {
+      if (hmComboRef.current && !hmComboRef.current.contains(e.target as Node)) {
         setHmOpen(false);
+      }
+      if (deptComboRef.current && !deptComboRef.current.contains(e.target as Node)) {
+        setDeptOpen(false);
       }
     }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  const filteredDepts = departments.filter((d) =>
+    !deptQuery || d.name.toLowerCase().includes(deptQuery.toLowerCase())
+  );
+
+  function selectDept(d: DepartmentOption) {
+    setSelectedDept(d);
+    setDeptQuery(d.name);
+    setDeptOpen(false);
+  }
 
   const filteredHM = hmUsers.filter((u) =>
     !hmQuery || u.name.toLowerCase().includes(hmQuery.toLowerCase()) ||
     u.email.toLowerCase().includes(hmQuery.toLowerCase())
   );
-
 
   function selectHM(u: UserOption) {
     setSelectedHM(u);
@@ -117,10 +143,14 @@ export default function AddJobModal({
     setHmOpen(false);
   }
 
-
   async function handleSave() {
     if (!title.trim()) {
       onToast("Missing Field", "Job title is required.", "ban");
+      return;
+    }
+    const finalDept = selectedDept?.name || deptQuery.trim();
+    if (!finalDept) {
+      onToast("Missing Field", "Department is required.", "ban");
       return;
     }
     if (!selectedHM) {
@@ -128,27 +158,24 @@ export default function AddJobModal({
       return;
     }
 
-
     setSaving(true);
-
 
     if (mode === "edit") {
       const result = await updateJobAction(jobId!, {
         title: title.trim(),
-        department,
+        department: finalDept,
+        departmentId: selectedDept?.id,
         hiringManager: selectedHM.name,
         hiringManagerId: selectedHM.id,
         status,
         budgetLimit: budget ? parseInt(budget) : 0,
       });
 
-
       if (result.error) {
         onToast("Error", result.error, "ban");
         setSaving(false);
         return;
       }
-
 
       const job = result.job!;
       const audit: AuditEntry = {
@@ -156,24 +183,21 @@ export default function AddJobModal({
         user: "System",
         action: "EDITED_JOB",
         target: `${job.id} (${job.title})`,
-        notes: `Job requisition updated. Department: ${department}. HM: ${selectedHM.name}. Budget: $${(budget ? parseInt(budget) : 0).toLocaleString("en-US")}.`,
+        notes: `Job requisition updated. Department: ${finalDept}. HM: ${selectedHM.name}. Budget: $${(budget ? parseInt(budget) : 0).toLocaleString("en-US")}.`,
       };
 
-
       onSave(job, audit);
-      onToast("Job Updated", `"${title.trim()}" has been updated.`, "briefcase");
-      setSaving(false);
-      onClose();
+      onToast("Job Updated", `"${title.trim()}" has been updated.`, "pen-to-square");
     } else {
       const result = await createJobAction({
         title: title.trim(),
-        department,
+        department: finalDept,
+        departmentId: selectedDept?.id,
         hiringManager: selectedHM.name,
         hiringManagerId: selectedHM.id,
         status,
         budgetLimit: budget ? parseInt(budget) : 0,
       });
-
 
       if (result.error) {
         onToast("Error", result.error, "ban");
@@ -181,29 +205,30 @@ export default function AddJobModal({
         return;
       }
 
-
-      const job = result.job;
+      const job = result.job!;
       const audit: AuditEntry = {
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         user: "System",
-        action: "CREATED_JOB",
+        action: mode === "clone" ? "CLONED_JOB" : "CREATED_JOB",
         target: `${job.id} (${job.title})`,
-        notes: `Job requisition created. Department: ${department}. HM: ${selectedHM.name}. Budget: $${(budget ? parseInt(budget) : 0).toLocaleString("en-US")}.`,
+        notes: `Job requisition ${mode === "clone" ? "cloned" : "created"}. Department: ${finalDept}. HM: ${selectedHM.name}. Budget: $${(budget ? parseInt(budget) : 0).toLocaleString("en-US")}.`,
       };
 
-
       onSave(job, audit);
-      onToast("Job Created", `"${title.trim()}" has been added to active requisitions.`, "briefcase");
-      setSaving(false);
-      onClose();
+      onToast(
+        mode === "clone" ? "Job Cloned" : "Job Created",
+        `"${title.trim()}" has been ${mode === "clone" ? "cloned and saved" : "added to active requisitions"}.`,
+        mode === "clone" ? "copy" : "briefcase"
+      );
     }
-  }
 
+    setSaving(false);
+    onClose();
+  }
 
   return (
     <div className="fixed inset-0 bg-slate-950/40 dark:bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col transition-colors duration-200">
-
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between rounded-t-2xl">
@@ -220,10 +245,8 @@ export default function AddJobModal({
           </button>
         </div>
 
-
         {/* Body */}
         <div className="p-6 space-y-4">
-
 
           {/* Title */}
           <div>
@@ -239,19 +262,89 @@ export default function AddJobModal({
             />
           </div>
 
-
-          {/* Department + Status */}
+          {/* Department combobox + Status */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Department</label>
-              <select
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-              >
-                {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                Department <span className="text-red-500">*</span>
+              </label>
+
+              {loadingDepts ? (
+                <div className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-400 flex items-center gap-2">
+                  <i className="fa-solid fa-circle-notch fa-spin text-xs" />
+                  Loading…
+                </div>
+              ) : (
+                <div className="relative" ref={deptComboRef}>
+                  <div className="relative">
+                    <i className="fa-solid fa-building absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
+                    <input
+                      type="text"
+                      value={deptQuery}
+                      onFocus={() => setDeptOpen(true)}
+                      onChange={(e) => {
+                        setDeptQuery(e.target.value);
+                        setSelectedDept(null);
+                        setDeptOpen(true);
+                      }}
+                      placeholder="Search department…"
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-8 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setDeptOpen((o) => !o)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                    >
+                      <i className={`fa-solid fa-chevron-${deptOpen ? "up" : "down"} text-[10px]`} />
+                    </button>
+                  </div>
+
+                  {/* Department Dropdown */}
+                  {deptOpen && (
+                    <ul className="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+                      {filteredDepts.length === 0 ? (
+                        <li className="px-3 py-3 text-xs text-slate-400 text-center">
+                          {deptQuery ? `Use "${deptQuery}"` : "No departments found"}
+                        </li>
+                      ) : (
+                        filteredDepts.map((d) => (
+                          <li key={d.id}>
+                            <button
+                              type="button"
+                              onClick={() => selectDept(d)}
+                              className={`w-full text-left px-3 py-2.5 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors flex items-center gap-2.5 ${selectedDept?.id === d.id ? "bg-indigo-50 dark:bg-indigo-950/40" : ""}`}
+                            >
+                              <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
+                                <i className="fa-solid fa-building text-[10px] text-slate-500 dark:text-slate-400" />
+                              </div>
+                              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{d.name}</span>
+                              {selectedDept?.id === d.id && (
+                                <i className="fa-solid fa-check text-indigo-600 dark:text-indigo-400 text-[10px] ml-auto flex-shrink-0" />
+                              )}
+                            </button>
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  )}
+
+                  {selectedDept && (
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      <i className="fa-solid fa-circle-check text-emerald-500 text-[10px]" />
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">{selectedDept.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedDept(null); setDeptQuery(""); }}
+                        className="text-slate-400 hover:text-red-500 transition-colors ml-1"
+                      >
+                        <i className="fa-solid fa-xmark text-[10px]" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Status</label>
               <select
@@ -264,14 +357,12 @@ export default function AddJobModal({
             </div>
           </div>
 
-
           {/* Hiring Manager combobox + Budget */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                 Hiring Manager <span className="text-red-500">*</span>
               </label>
-
 
               {loadingHM ? (
                 <div className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-400 flex items-center gap-2">
@@ -280,10 +371,10 @@ export default function AddJobModal({
                 </div>
               ) : hmUsers.length === 0 ? (
                 <div className="w-full bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg px-3 py-2.5 text-xs text-amber-600 dark:text-amber-400">
-                  No hiring managers found
+                  No users found
                 </div>
               ) : (
-                <div className="relative" ref={comboRef}>
+                <div className="relative" ref={hmComboRef}>
                   <div className="relative">
                     <i className="fa-solid fa-user-tie absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
                     <input
@@ -306,7 +397,6 @@ export default function AddJobModal({
                       <i className={`fa-solid fa-chevron-${hmOpen ? "up" : "down"} text-[10px]`} />
                     </button>
                   </div>
-
 
                   {/* Dropdown list */}
                   {hmOpen && (
@@ -340,72 +430,69 @@ export default function AddJobModal({
                       ))}
                     </ul>
                   )}
-                </div>
-              )}
 
-
-              {/* Selected user pill */}
-              {selectedHM && (
-                <div className="mt-1.5 flex items-center gap-1.5">
-                  <i className="fa-solid fa-circle-check text-emerald-500 text-[10px]" />
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400">{selectedHM.email}</span>
+                  {selectedHM && (
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      <i className="fa-solid fa-circle-check text-emerald-500 text-[10px]" />
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">{selectedHM.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedHM(null); setHmQuery(""); }}
+                        className="text-slate-400 hover:text-red-500 transition-colors ml-1"
+                      >
+                        <i className="fa-solid fa-xmark text-[10px]" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-
 
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                 Budget Ceiling (USD)
               </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-sm pointer-events-none">$</span>
+                <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 pointer-events-none text-xs">
+                  $
+                </span>
                 <input
                   type="number"
                   value={budget}
                   onChange={(e) => setBudget(e.target.value)}
-                  placeholder="150000"
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-6 pr-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                  placeholder="e.g. 150000"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-7 pr-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                 />
               </div>
             </div>
           </div>
-
-
-          {/* Preview */}
-          {title && selectedHM && (
-            <div className="bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/50 rounded-xl p-4">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-500 dark:text-indigo-400 mb-2">Preview</p>
-              <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{title}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                {department} &middot; HM: {selectedHM.name} &middot; Budget: ${(budget ? parseInt(budget) : 0).toLocaleString("en-US")}
-              </p>
-            </div>
-          )}
         </div>
 
-
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3 bg-slate-50 dark:bg-slate-950 rounded-b-2xl">
+        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3 rounded-b-2xl">
           <button
+            type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all"
+            className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm font-medium transition-colors"
           >
             Cancel
           </button>
           <button
+            type="button"
+            disabled={saving}
             onClick={handleSave}
-            disabled={saving || loadingHM}
-            className="px-5 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2"
+            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-400 text-white rounded-lg text-sm font-semibold transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-2"
           >
             {saving ? (
-              <><i className="fa-solid fa-circle-notch fa-spin" /><span>Saving…</span></>
-            ) : mode === "edit" ? (
-              <><i className="fa-solid fa-floppy-disk" /><span>Save Job</span></>
-            ) : mode === "clone" ? (
-              <><i className="fa-solid fa-copy" /><span>Clone Requisition</span></>
+              <>
+                <i className="fa-solid fa-circle-notch fa-spin text-xs" />
+                <span>Saving…</span>
+              </>
             ) : (
-              <><i className="fa-solid fa-plus" /><span>Create Requisition</span></>
+              <>
+                <i className={`fa-solid ${mode === "edit" ? "fa-pen-to-square" : mode === "clone" ? "fa-copy" : "fa-plus"} text-xs`} />
+                <span>{mode === "edit" ? "Save Changes" : mode === "clone" ? "Clone Requisition" : "Create Requisition"}</span>
+              </>
             )}
           </button>
         </div>
@@ -413,6 +500,3 @@ export default function AddJobModal({
     </div>
   );
 }
-
-
-
