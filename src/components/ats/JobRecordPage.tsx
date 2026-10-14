@@ -452,7 +452,7 @@ export default function JobRecordPage({
                               </span>
                             </td>
                             <td className="px-4 py-3 text-right">
-                              {c.expectedSalary ? `$${Number(c.expectedSalary).toLocaleString()}` : "-"}
+                              {c.expectedSalary ? `₹${Number(c.expectedSalary).toLocaleString("en-IN")}` : "-"}
                             </td>
                           </tr>
                         ))}

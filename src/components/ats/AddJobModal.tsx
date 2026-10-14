@@ -183,7 +183,7 @@ export default function AddJobModal({
         user: "System",
         action: "EDITED_JOB",
         target: `${job.id} (${job.title})`,
-        notes: `Job requisition updated. Department: ${finalDept}. HM: ${selectedHM.name}. Budget: $${(budget ? parseInt(budget) : 0).toLocaleString("en-US")}.`,
+        notes: `Job requisition updated. Department: ${finalDept}. HM: ${selectedHM.name}. Budget: ₹${(budget ? parseInt(budget) : 0).toLocaleString("en-IN")}.`,
       };
 
       onSave(job, audit);
@@ -211,7 +211,7 @@ export default function AddJobModal({
         user: "System",
         action: mode === "clone" ? "CLONED_JOB" : "CREATED_JOB",
         target: `${job.id} (${job.title})`,
-        notes: `Job requisition ${mode === "clone" ? "cloned" : "created"}. Department: ${finalDept}. HM: ${selectedHM.name}. Budget: $${(budget ? parseInt(budget) : 0).toLocaleString("en-US")}.`,
+        notes: `Job requisition ${mode === "clone" ? "cloned" : "created"}. Department: ${finalDept}. HM: ${selectedHM.name}. Budget: ₹${(budget ? parseInt(budget) : 0).toLocaleString("en-IN")}.`,
       };
 
       onSave(job, audit);
@@ -450,11 +450,11 @@ export default function AddJobModal({
 
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                Budget Ceiling (USD)
+                Budget Ceiling (₹)
               </label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 pointer-events-none text-xs">
-                  $
+                  ₹
                 </span>
                 <input
                   type="number"

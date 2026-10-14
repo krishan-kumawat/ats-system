@@ -108,7 +108,7 @@ export default function EvaluationWorkspace({
       user: "Founder",
       action: "OFFER_APPROVED",
       target: candidate.name,
-      notes: `Digitally signed off salary allocation of $${(candidate.proposedSalary || candidate.expectedSalary).toLocaleString("en-US")} annually.`,
+      notes: `Digitally signed off salary allocation of ₹${(candidate.proposedSalary || candidate.expectedSalary).toLocaleString("en-IN")} annually.`,
     });
     onApproveOffer?.(candidate.id).catch(() => { });
     onToast(

@@ -166,7 +166,7 @@ export default function PipelineBoard({
       user: "HRRecruiter_01",
       action: "STAGE_TRANSITION",
       target: cand.name,
-      notes: `Locked state triggered. Budget request ($${salary.toLocaleString("en-US")}) logged for review.`,
+      notes: `Locked state triggered. Budget request (₹${salary.toLocaleString("en-IN")}) logged for review.`,
     });
     onToast("Lock Gate Triggered", `${cand.name} locked pending Founder sign-off.`, "lock");
     onMoveStage?.(salaryModal.candidateId, "Offer", salary, isNaN(equity) ? 0 : equity);
@@ -201,7 +201,7 @@ export default function PipelineBoard({
               will lock this card pending Founder approval.
             </p>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-              Proposed Base Salary (USD)
+              Proposed Base Salary (₹)
             </label>
             <input
               type="text"
@@ -385,7 +385,7 @@ export default function PipelineBoard({
               <span className="text-slate-300 dark:text-slate-600">·</span>
               <span className="text-slate-500 dark:text-slate-400">HM: {selectedJob.hiringManager}</span>
               <span className="text-slate-300 dark:text-slate-600">·</span>
-              <span className="font-semibold text-slate-700 dark:text-slate-300">${(selectedJob.budgetLimit / 1000).toFixed(0)}k</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300">₹{(selectedJob.budgetLimit / 1000).toFixed(0)}k</span>
               <button
                 onClick={() => setSelectedJobId("ALL")}
                 className="ml-0.5 w-4 h-4 rounded flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"

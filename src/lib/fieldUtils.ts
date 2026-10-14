@@ -113,7 +113,7 @@ export function resolveFieldDisplayValue(
     if (typeof val === "number") {
         const lowerName = fieldApiName.toLowerCase();
         if (CURRENCY_FIELD_PATTERNS.some((p) => lowerName.includes(p))) {
-            return `$${val.toLocaleString("en-US")}`;
+            return `₹${val.toLocaleString("en-IN")}`;
         }
         return String(val);
     }

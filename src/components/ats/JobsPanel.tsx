@@ -187,7 +187,7 @@ export default function JobsPanel({ jobs, candidates, canAddJob, onJobAdd, onToa
                   </div>
                   <div className="col-span-1 text-center">
                     <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                      ${(job.budgetLimit / 1000).toFixed(0)}k
+                      ₹{(job.budgetLimit / 1000).toFixed(0)}k
                     </span>
                   </div>
                   <div className="col-span-1 text-center">
@@ -267,7 +267,7 @@ function ApplicationsView({
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {job.department} &middot; HM: {job.hiringManager} &middot; Budget: ${job.budgetLimit.toLocaleString("en-US")}
+              {job.department} &middot; HM: {job.hiringManager} &middot; Budget: ₹{job.budgetLimit.toLocaleString("en-IN")}
             </p>
           </div>
         </div>
@@ -353,13 +353,13 @@ function ApplicationsView({
                   </div>
                   <div className="col-span-1 text-center">
                     <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                      ${(c.expectedSalary / 1000).toFixed(0)}k
+                      ₹{(c.expectedSalary / 1000).toFixed(0)}k
                     </span>
                   </div>
                   <div className="col-span-1 text-center">
                     {c.proposedSalary > 0 ? (
                       <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                        ${(c.proposedSalary / 1000).toFixed(0)}k
+                        ₹{(c.proposedSalary / 1000).toFixed(0)}k
                       </span>
                     ) : (
                       <span className="text-xs text-slate-400">—</span>

@@ -462,7 +462,7 @@ export default function ApplicantsPanel({ jobs, user, onOpenCandidate, onToast }
                     {/* Salary */}
                     <td className="px-4 py-3 hidden lg:table-cell">
                       <span className="font-medium text-slate-700 dark:text-slate-300">
-                        {a.expectedSalary ? `$${a.expectedSalary.toLocaleString("en-US")}` : "—"}
+                        {a.expectedSalary ? `₹${a.expectedSalary.toLocaleString("en-IN")}` : "—"}
                       </span>
                     </td>
 

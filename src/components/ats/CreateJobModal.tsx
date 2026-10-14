@@ -426,10 +426,10 @@ export default function CreateJobModal({ onClose, onSave, onToast }: CreateJobMo
                         {/* Budget */}
                         <div>
                             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                                Budget Ceiling (USD)
+                                Budget Ceiling (₹)
                             </label>
                             <div className="relative">
-                                <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-sm pointer-events-none">$</span>
+                                <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-sm pointer-events-none">₹</span>
                                 <input
                                     type="number"
                                     value={budget}
