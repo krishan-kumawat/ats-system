@@ -267,7 +267,12 @@ function ApplicationsView({
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {job.department} &middot; HM: {job.hiringManager} &middot; Budget: ₹{job.budgetLimit.toLocaleString("en-IN")}
+              {job.department} &middot; HM: {job.hiringManager}
+              {job.workMode && <> &middot; {job.workMode}</>}
+              &middot; Budget: ₹{job.budgetLimit.toLocaleString("en-IN")}
+              {(job.salaryMin != null || job.salaryMax != null) && (
+                <> &middot; Salary: ₹{job.salaryMin != null ? job.salaryMin.toLocaleString("en-IN") : "0"} – ₹{job.salaryMax != null ? job.salaryMax.toLocaleString("en-IN") : "—"}</>
+              )}
             </p>
           </div>
         </div>

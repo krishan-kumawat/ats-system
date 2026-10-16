@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { JobStatus } from "@/lib/atsStore";
-import { updateJobSimpleAction, fetchDepartmentsAction, DepartmentOption } from "@/app/actions/jobs";
-import { fetchHiringManagerUsersAction, UserOption } from "@/app/actions/assignments";
+import { JobStatus, WorkMode } from "@/lib/atsStore";
+import { updateJobSimpleAction, fetchDepartmentsAction, type DepartmentOption } from "@/app/actions/jobs";
+import { fetchHiringManagerUsersAction, type UserOption } from "@/app/actions/assignments";
 import { ROLE_META } from "@/lib/permissions";
 import { UserRole } from "@/lib/enums";
 
@@ -13,6 +13,8 @@ const STATUS_OPTIONS: { value: JobStatus; label: string }[] = [
     { value: "ON_HOLD", label: "On Hold" },
     { value: "CLOSED", label: "Closed" },
 ];
+
+const WORK_MODES: WorkMode[] = ["Hybrid", "On-site", "Remote"];
 
 interface EditJobModalProps {
     record: any;
@@ -31,10 +33,18 @@ export default function EditJobModal({ record, onClose, onSaved, onToast }: Edit
     const [title, setTitle] = useState(record?.title || "");
     const [description, setDescription] = useState(record?.description || "");
     const [status, setStatus] = useState<JobStatus>(normalizeStatus(record?.status));
+    const [workMode, setWorkMode] = useState<WorkMode>((record?.workMode as WorkMode) || "Hybrid");
 
     // Budget: handle 0, budgetLimit, budget
     const rawBudget = record?.budgetLimit != null ? record.budgetLimit : (record?.budget != null ? record.budget : "");
     const [budget, setBudget] = useState(rawBudget !== "" && rawBudget !== null && rawBudget !== undefined ? String(rawBudget) : "");
+
+    // Salaries: salaryMin, salaryMax
+    const rawSalaryMin = record?.salaryMin != null ? record.salaryMin : "";
+    const [salaryMin, setSalaryMin] = useState(rawSalaryMin !== "" && rawSalaryMin !== null && rawSalaryMin !== undefined ? String(rawSalaryMin) : "");
+    const rawSalaryMax = record?.salaryMax != null ? record.salaryMax : "";
+    const [salaryMax, setSalaryMax] = useState(rawSalaryMax !== "" && rawSalaryMax !== null && rawSalaryMax !== undefined ? String(rawSalaryMax) : "");
+
     const [saving, setSaving] = useState(false);
 
     // Department combobox state
@@ -164,6 +174,19 @@ export default function EditJobModal({ record, onClose, onSaved, onToast }: Edit
             return;
         }
 
+        if (salaryMin && Number(salaryMin) < 0) {
+            onToast("Invalid Value", "Minimum salary cannot be negative.", "ban");
+            return;
+        }
+        if (salaryMax && Number(salaryMax) < 0) {
+            onToast("Invalid Value", "Maximum salary cannot be negative.", "ban");
+            return;
+        }
+        if (salaryMin && salaryMax && Number(salaryMin) > Number(salaryMax)) {
+            onToast("Invalid Value", "Minimum salary cannot exceed maximum salary.", "ban");
+            return;
+        }
+
         setSaving(true);
 
         const result = await updateJobSimpleAction(record.id, {
@@ -173,6 +196,9 @@ export default function EditJobModal({ record, onClose, onSaved, onToast }: Edit
             departmentId: selectedDept?.id || undefined,
             ownerId: selectedHM?.id || undefined,
             budgetLimit: budget !== "" ? Number(budget) : undefined,
+            workMode,
+            salaryMin: salaryMin !== "" ? Number(salaryMin) : undefined,
+            salaryMax: salaryMax !== "" ? Number(salaryMax) : undefined,
         });
 
         if (result.error) {
@@ -188,7 +214,7 @@ export default function EditJobModal({ record, onClose, onSaved, onToast }: Edit
 
     return (
         <div className="fixed inset-0 bg-slate-950/40 dark:bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col transition-colors duration-200 max-h-[90vh] overflow-hidden">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col transition-colors duration-200 max-h-[90vh] overflow-hidden">
 
                 {/* Header */}
                 <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between rounded-t-2xl flex-shrink-0">
@@ -236,7 +262,7 @@ export default function EditJobModal({ record, onClose, onSaved, onToast }: Edit
                         />
                     </div>
 
-                    {/* Department + Status row */}
+                    {/* Department + Hiring Manager row */}
                     <div className="grid grid-cols-2 gap-4">
 
                         {/* Department combobox */}
@@ -319,47 +345,6 @@ export default function EditJobModal({ record, onClose, onSaved, onToast }: Edit
                                 </div>
                             )}
                         </div>
-
-                        {/* Status dropdown */}
-                        <div>
-                            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                                Status
-                            </label>
-
-                            <div className="relative" ref={statusRef}>
-                                <button
-                                    type="button"
-                                    onClick={() => setStatusOpen((o) => !o)}
-                                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all flex items-center justify-between"
-                                >
-                                    <span>{selectedStatusLabel}</span>
-                                    <i className={`fa-solid fa-chevron-${statusOpen ? "up" : "down"} text-[10px] text-slate-400`} />
-                                </button>
-
-                                {statusOpen && (
-                                    <ul className="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden">
-                                        {STATUS_OPTIONS.map((s) => (
-                                            <li key={s.value}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => { setStatus(s.value); setStatusOpen(false); }}
-                                                    className={`w-full text-left px-3 py-2.5 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors flex items-center justify-between ${status === s.value ? "bg-indigo-50 dark:bg-indigo-950/40" : ""}`}
-                                                >
-                                                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">{s.label}</span>
-                                                    {status === s.value && (
-                                                        <i className="fa-solid fa-check text-indigo-600 dark:text-indigo-400 text-[10px]" />
-                                                    )}
-                                                </button>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Hiring Manager combobox + Budget row */}
-                    <div className="grid grid-cols-2 gap-4">
 
                         {/* Hiring Manager combobox */}
                         <div>
@@ -451,20 +436,125 @@ export default function EditJobModal({ record, onClose, onSaved, onToast }: Edit
                                 </div>
                             )}
                         </div>
+                    </div>
 
-                        {/* Budget */}
+                    {/* Status + Work Mode row */}
+                    <div className="grid grid-cols-2 gap-4">
+
+                        {/* Status dropdown */}
+                        <div>
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                                Status
+                            </label>
+
+                            <div className="relative" ref={statusRef}>
+                                <button
+                                    type="button"
+                                    onClick={() => setStatusOpen((o) => !o)}
+                                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all flex items-center justify-between"
+                                >
+                                    <span>{selectedStatusLabel}</span>
+                                    <i className={`fa-solid fa-chevron-${statusOpen ? "up" : "down"} text-[10px] text-slate-400`} />
+                                </button>
+
+                                {statusOpen && (
+                                    <ul className="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden">
+                                        {STATUS_OPTIONS.map((s) => (
+                                            <li key={s.value}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setStatus(s.value); setStatusOpen(false); }}
+                                                    className={`w-full text-left px-3 py-2.5 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors flex items-center justify-between ${status === s.value ? "bg-indigo-50 dark:bg-indigo-950/40" : ""}`}
+                                                >
+                                                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">{s.label}</span>
+                                                    {status === s.value && (
+                                                        <i className="fa-solid fa-check text-indigo-600 dark:text-indigo-400 text-[10px]" />
+                                                    )}
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Work Mode */}
+                        <div>
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                                Work Mode <span className="text-red-500">*</span>
+                            </label>
+                            <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg">
+                                {WORK_MODES.map((mode) => (
+                                    <button
+                                        key={mode}
+                                        type="button"
+                                        onClick={() => setWorkMode(mode)}
+                                        className={`py-1.5 text-xs font-semibold rounded-md transition-all ${
+                                            workMode === mode
+                                                ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                                                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                                        }`}
+                                    >
+                                        {mode}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Financials: Budget + Salary Range (3 columns) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+                        {/* Budget Limit */}
                         <div>
                             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                                 Budget Ceiling (₹)
                             </label>
                             <div className="relative">
-                                <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-sm pointer-events-none">₹</span>
+                                <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs pointer-events-none">₹</span>
                                 <input
                                     type="number"
+                                    min="0"
                                     value={budget}
                                     onChange={(e) => setBudget(e.target.value)}
-                                    placeholder="150000"
-                                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-6 pr-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                    placeholder="160000"
+                                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-7 pr-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Min Salary */}
+                        <div>
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                                Min Salary (₹)
+                            </label>
+                            <div className="relative">
+                                <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs pointer-events-none">₹</span>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={salaryMin}
+                                    onChange={(e) => setSalaryMin(e.target.value)}
+                                    placeholder="120000"
+                                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-7 pr-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Max Salary */}
+                        <div>
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                                Max Salary (₹)
+                            </label>
+                            <div className="relative">
+                                <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs pointer-events-none">₹</span>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={salaryMax}
+                                    onChange={(e) => setSalaryMax(e.target.value)}
+                                    placeholder="160000"
+                                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-7 pr-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                 />
                             </div>
                         </div>

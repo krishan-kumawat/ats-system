@@ -7,7 +7,7 @@ import {
   updateUserAction,
   fetchPermissionSetsAction,
   assignUserPermissionSetsAction,
-  UserDetailPayload,
+  type UserDetailPayload,
 } from "@/app/actions/users";
 import { fetchProfilesAction } from "@/app/actions/permissions";
 

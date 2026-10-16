@@ -102,10 +102,16 @@ export async function fetchInitialData(): Promise<InitialData> {
     const jobs: Job[] = backendJobs.map((j: any) => ({
       id: j.id,
       title: j.title,
+      description: j.description || "",
       department: j.department?.name || "Unassigned",
+      departmentId: j.departmentId || j.department?.id,
       hiringManager: j.owner ? `${j.owner.firstName} ${j.owner.lastName}` : "System Owner",
+      ownerId: j.ownerId || j.owner?.id,
       status: (j.status || "OPEN").toUpperCase() as unknown as JobStatus,
-      budgetLimit: Number(j.budgetLimit || 0),
+      budgetLimit: Number(j.budgetLimit ?? j.budget ?? 0),
+      workMode: j.workMode || "On-site",
+      salaryMin: j.salaryMin != null ? Number(j.salaryMin) : null,
+      salaryMax: j.salaryMax != null ? Number(j.salaryMax) : null,
       createdAt: j.createdAt ? String(j.createdAt).slice(0, 10) : "",
     }));
 

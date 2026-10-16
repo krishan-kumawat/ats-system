@@ -21,9 +21,10 @@ import {
 
 interface JobRecordPageProps {
   jobId: string;
-  jobs: any[];
-  candidates: any[];
-  auditLogs: AuditEntry[];
+  jobRecord?: any;
+  jobs?: any[];
+  candidates?: any[];
+  auditLogs?: AuditEntry[];
   role: "founder" | "recruiter";
   onBack: () => void;
   onToast: (title: string, msg: string, icon?: string) => void;
@@ -35,9 +36,10 @@ interface JobRecordPageProps {
 
 export default function JobRecordPage({
   jobId,
-  jobs,
-  candidates,
-  auditLogs,
+  jobRecord,
+  jobs = [],
+  candidates = [],
+  auditLogs = [],
   role,
   onBack,
   onToast,
@@ -63,6 +65,7 @@ export default function JobRecordPage({
 
   const [fullJob, setFullJob] = useState<any | null>(null);
   const [fullJobLoading, setFullJobLoading] = useState(true);
+  const [fullJobError, setFullJobError] = useState<string | null>(null);
 
 
   const [showEditModal, setShowEditModal] = useState(false);
@@ -86,6 +89,9 @@ export default function JobRecordPage({
 
 
   useEffect(() => {
+    setFullJobLoading(true);
+    setFullJobError(null);
+
     fetchRecordAccessAction(jobId, "Job")
       .then((res) => setAccess(res))
       .catch((err) => console.error("Error fetching record access", err));
@@ -98,6 +104,7 @@ export default function JobRecordPage({
       })
       .catch((err) => {
         console.error("Error fetching job details", err);
+        setFullJobError(err.message || "Failed to load job details.");
         setFullJobLoading(false);
       });
 
@@ -164,12 +171,47 @@ export default function JobRecordPage({
   };
 
 
-  const job = jobs.find((j) => j.id === jobId);
-  if (!job) {
+  const job = (jobs || []).find((j) => j.id === jobId) || null;
+  const record = fullJob || jobRecord || job;
+
+
+  // Filter candidates applied to this job
+  const relatedCandidates = (candidates || []).filter((c) => c.jobId === jobId || c.job?.id === jobId);
+
+
+  // Filter audit logs for this job
+  const relatedLogs = (auditLogs || []).filter(
+    (log) =>
+      log.target === jobId ||
+      (log.notes && record?.title && log.notes.toLowerCase().includes(record.title.toLowerCase()))
+  );
+
+
+  const readableFields = metadata?.fields.filter((f) => f.allowRead) ?? [];
+  const classified = useMemo(
+    () => classifyRecordFields(readableFields, RECORD_PAGE_EXCLUDED_FIELDS),
+    [readableFields.length, metadata]
+  );
+
+
+  if (fullJobLoading && !record) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-4">
+        <div className="w-10 h-10 border-4 border-indigo-650 border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Loading job details...</p>
+      </div>
+    );
+  }
+
+
+  if (!record) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-4">
         <i className="fa-solid fa-triangle-exclamation text-rose-500 text-3xl animate-bounce" />
         <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">Job Record Not Found</h3>
+        {fullJobError && (
+          <p className="text-xs text-rose-500 max-w-sm text-center">{fullJobError}</p>
+        )}
         <button
           onClick={onBack}
           className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold"
@@ -179,26 +221,6 @@ export default function JobRecordPage({
       </div>
     );
   }
-
-
-  // Filter candidates applied to this job
-  const relatedCandidates = candidates.filter((c) => c.jobId === jobId || c.job?.id === jobId);
-
-
-  // Filter audit logs for this job
-  const relatedLogs = auditLogs.filter(
-    (log) =>
-      log.target === jobId ||
-      (log.notes && log.notes.toLowerCase().includes(job.title.toLowerCase()))
-  );
-
-
-  const record = fullJob || job;
-  const readableFields = metadata?.fields.filter((f) => f.allowRead) ?? [];
-  const classified = useMemo(
-    () => classifyRecordFields(readableFields, RECORD_PAGE_EXCLUDED_FIELDS),
-    [readableFields.length, metadata]
-  );
 
 
   return (
@@ -215,7 +237,7 @@ export default function JobRecordPage({
               Job
             </div>
             <h1 className="text-lg font-bold text-slate-850 dark:text-slate-100 flex items-center gap-2">
-              {job.title}
+              {record.title || "Untitled Job"}
             </h1>
           </div>
         </div>
@@ -517,7 +539,7 @@ export default function JobRecordPage({
               <div className="flex items-center gap-2">
                 <i className="fa-solid fa-share-nodes text-indigo-600 dark:text-indigo-400 text-lg" />
                 <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                  Sharing Settings: {job.title}
+                  Sharing Settings: {record?.title || "Job"}
                 </h3>
               </div>
               <button
@@ -647,13 +669,17 @@ export default function JobRecordPage({
           mode="edit"
           jobId={jobId}
           initialValues={{
-            title: fullJob?.title || job.title || "",
-            department: fullJob?.department?.name || (typeof fullJob?.department === "string" ? fullJob.department : "") || job.department?.name || (typeof job.department === "string" ? job.department : "") || "",
-            departmentId: fullJob?.departmentId || fullJob?.department?.id || job.departmentId || "",
-            status: (fullJob?.status || job.status || "DRAFT").toUpperCase().replace(/ /g, "_") as JobStatus,
-            budget: (fullJob?.budgetLimit != null ? fullJob.budgetLimit : fullJob?.budget != null ? fullJob.budget : job.budgetLimit != null ? job.budgetLimit : "") !== "" ? String(fullJob?.budgetLimit ?? fullJob?.budget ?? job.budgetLimit ?? "") : "",
-            hiringManagerName: fullJob?.owner ? `${fullJob.owner.firstName || ""} ${fullJob.owner.lastName || ""}`.trim() : job.hiringManager || "",
-            hiringManagerId: fullJob?.ownerId || fullJob?.owner?.id || job.hiringManagerId || "",
+            title: fullJob?.title || jobRecord?.title || job?.title || "",
+            description: fullJob?.description || jobRecord?.description || job?.description || "",
+            department: fullJob?.department?.name || (typeof fullJob?.department === "string" ? fullJob.department : "") || jobRecord?.department?.name || (typeof jobRecord?.department === "string" ? jobRecord.department : "") || job?.department?.name || (typeof job?.department === "string" ? job?.department : "") || "",
+            departmentId: fullJob?.departmentId || fullJob?.department?.id || jobRecord?.departmentId || jobRecord?.department?.id || job?.departmentId || "",
+            status: (fullJob?.status || jobRecord?.status || job?.status || "DRAFT").toUpperCase().replace(/ /g, "_") as JobStatus,
+            budget: (fullJob?.budgetLimit != null ? fullJob.budgetLimit : fullJob?.budget != null ? fullJob.budget : jobRecord?.budgetLimit != null ? jobRecord.budgetLimit : jobRecord?.budget != null ? jobRecord.budget : job?.budgetLimit != null ? job.budgetLimit : "") !== "" ? String(fullJob?.budgetLimit ?? fullJob?.budget ?? jobRecord?.budgetLimit ?? jobRecord?.budget ?? job?.budgetLimit ?? "") : "",
+            hiringManagerName: fullJob?.owner ? `${fullJob.owner.firstName || ""} ${fullJob.owner.lastName || ""}`.trim() : (jobRecord?.owner ? `${jobRecord.owner.firstName || ""} ${jobRecord.owner.lastName || ""}`.trim() : (jobRecord?.hiringManager || job?.hiringManager || "")),
+            hiringManagerId: fullJob?.ownerId || fullJob?.owner?.id || jobRecord?.ownerId || jobRecord?.owner?.id || job?.hiringManagerId || "",
+            workMode: fullJob?.workMode || jobRecord?.workMode || job?.workMode || "Hybrid",
+            salaryMin: (fullJob?.salaryMin != null ? fullJob.salaryMin : jobRecord?.salaryMin != null ? jobRecord.salaryMin : job?.salaryMin != null ? job.salaryMin : "") !== "" ? String(fullJob?.salaryMin ?? jobRecord?.salaryMin ?? job?.salaryMin ?? "") : "",
+            salaryMax: (fullJob?.salaryMax != null ? fullJob.salaryMax : jobRecord?.salaryMax != null ? jobRecord.salaryMax : job?.salaryMax != null ? job?.salaryMax : "") !== "" ? String(fullJob?.salaryMax ?? jobRecord?.salaryMax ?? job?.salaryMax ?? "") : "",
           }}
           onClose={() => setShowEditModal(false)}
           onSave={handleEditSave}
@@ -666,13 +692,17 @@ export default function JobRecordPage({
         <AddJobModal
           mode="clone"
           initialValues={{
-            title: (fullJob?.title || job.title) ? `Clone of ${fullJob?.title || job.title}` : "",
-            department: fullJob?.department?.name || (typeof fullJob?.department === "string" ? fullJob.department : "") || job.department?.name || (typeof job.department === "string" ? job.department : "") || "",
-            departmentId: fullJob?.departmentId || fullJob?.department?.id || job.departmentId || "",
-            status: (fullJob?.status || job.status || "DRAFT").toUpperCase().replace(/ /g, "_") as JobStatus,
-            budget: (fullJob?.budgetLimit != null ? fullJob.budgetLimit : fullJob?.budget != null ? fullJob.budget : job.budgetLimit != null ? job.budgetLimit : "") !== "" ? String(fullJob?.budgetLimit ?? fullJob?.budget ?? job.budgetLimit ?? "") : "",
-            hiringManagerName: fullJob?.owner ? `${fullJob.owner.firstName || ""} ${fullJob.owner.lastName || ""}`.trim() : job.hiringManager || "",
-            hiringManagerId: fullJob?.ownerId || fullJob?.owner?.id || job.hiringManagerId || "",
+            title: (fullJob?.title || jobRecord?.title || job?.title) ? `Clone of ${fullJob?.title || jobRecord?.title || job?.title}` : "",
+            description: fullJob?.description || jobRecord?.description || job?.description || "",
+            department: fullJob?.department?.name || (typeof fullJob?.department === "string" ? fullJob.department : "") || jobRecord?.department?.name || (typeof jobRecord?.department === "string" ? jobRecord.department : "") || job?.department?.name || (typeof job?.department === "string" ? job?.department : "") || "",
+            departmentId: fullJob?.departmentId || fullJob?.department?.id || jobRecord?.departmentId || jobRecord?.department?.id || job?.departmentId || "",
+            status: (fullJob?.status || jobRecord?.status || job?.status || "DRAFT").toUpperCase().replace(/ /g, "_") as JobStatus,
+            budget: (fullJob?.budgetLimit != null ? fullJob.budgetLimit : fullJob?.budget != null ? fullJob.budget : jobRecord?.budgetLimit != null ? jobRecord.budgetLimit : jobRecord?.budget != null ? jobRecord.budget : job?.budgetLimit != null ? job.budgetLimit : "") !== "" ? String(fullJob?.budgetLimit ?? fullJob?.budget ?? jobRecord?.budgetLimit ?? jobRecord?.budget ?? job?.budgetLimit ?? "") : "",
+            hiringManagerName: fullJob?.owner ? `${fullJob.owner.firstName || ""} ${fullJob.owner.lastName || ""}`.trim() : (jobRecord?.owner ? `${jobRecord.owner.firstName || ""} ${jobRecord.owner.lastName || ""}`.trim() : (jobRecord?.hiringManager || job?.hiringManager || "")),
+            hiringManagerId: fullJob?.ownerId || fullJob?.owner?.id || jobRecord?.ownerId || jobRecord?.owner?.id || job?.hiringManagerId || "",
+            workMode: fullJob?.workMode || jobRecord?.workMode || job?.workMode || "Hybrid",
+            salaryMin: (fullJob?.salaryMin != null ? fullJob.salaryMin : jobRecord?.salaryMin != null ? jobRecord.salaryMin : job?.salaryMin != null ? job.salaryMin : "") !== "" ? String(fullJob?.salaryMin ?? jobRecord?.salaryMin ?? job?.salaryMin ?? "") : "",
+            salaryMax: (fullJob?.salaryMax != null ? fullJob.salaryMax : jobRecord?.salaryMax != null ? jobRecord.salaryMax : job?.salaryMax != null ? job?.salaryMax : "") !== "" ? String(fullJob?.salaryMax ?? jobRecord?.salaryMax ?? job?.salaryMax ?? "") : "",
           }}
           onClose={() => setShowCloneModal(false)}
           onSave={handleCloneSave}

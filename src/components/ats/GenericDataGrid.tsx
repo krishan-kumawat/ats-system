@@ -13,7 +13,7 @@ import EditJobModal from "@/components/ats/EditJobModal";
 
 interface GenericDataGridProps {
   objectApiName: string;
-  onRowClick?: (id: string) => void;
+  onRowClick?: (id: string, record?: any) => void;
 }
 
 
@@ -271,7 +271,8 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
                 records.map((record, index) => (
                   <tr
                     key={record.id || index}
-                    className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors"
+                    onClick={() => onRowClick?.(record.id, record)}
+                    className={`hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors ${onRowClick ? "cursor-pointer" : ""}`}
                   >
                     {visibleFields.map((field) => {
                       let val = record[field.apiName];
@@ -325,7 +326,10 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
                           {isLink ? (
                             onRowClick ? (
                               <button
-                                onClick={() => onRowClick(record.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onRowClick(record.id, record);
+                                }}
                                 className="text-indigo-650 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-bold hover:underline text-left focus:outline-none"
                               >
                                 {val !== undefined && val !== null ? String(val) : "-"}
@@ -337,6 +341,7 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
                                     ? `/setup/profiles/${record.id}`
                                     : `/setup/users/${record.id}`
                                 }
+                                onClick={(e) => e.stopPropagation()}
                                 className="text-indigo-650 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-bold hover:underline"
                               >
                                 {val !== undefined && val !== null ? String(val) : "-"}
@@ -345,6 +350,7 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
                           ) : isProfileLink ? (
                             <a
                               href={`/setup/profiles/${record.profile?.id}`}
+                              onClick={(e) => e.stopPropagation()}
                               className="text-indigo-650 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-bold hover:underline"
                             >
                               {record.profile?.name || "-"}
@@ -359,7 +365,10 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
 
                     {/* Actions column based on OLS and record-level sharing access */}
                     {(metadata.ols.allowEdit || metadata.ols.allowDelete) && (
-                      <td className="px-6 py-4.5 text-right space-x-3">
+                      <td
+                        className="px-6 py-4.5 text-right space-x-3"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {metadata.ols.allowEdit && record.userRecordAccess?.isEditable !== false && (
                           <button
                             onClick={() => handleEdit(record.id)}

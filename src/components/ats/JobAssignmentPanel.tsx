@@ -9,8 +9,8 @@ import {
   fetchAssignableUsersAction,
   assignJobAction,
   revokeAssignmentAction,
-  AssignmentRow,
-  UserOption,
+  type AssignmentRow,
+  type UserOption,
 } from "@/app/actions/assignments";
 
 interface JobAssignmentPanelProps {

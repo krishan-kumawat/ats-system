@@ -6,13 +6,21 @@ export type Role = "recruiter" | "founder";
 export type Tab = "pipeline" | "analytics" | "audit" | "jobs" | "permissions" | "applicants" | "assignments" | "users";
 export type JobStatus = "OPEN" | "DRAFT" | "ON_HOLD" | "CLOSED";
 
+export type WorkMode = "On-site" | "Remote" | "Hybrid";
+
 export interface Job {
   id: string;
   title: string;
+  description?: string;
   department: string;
+  departmentId?: string;
   hiringManager: string;
+  ownerId?: string;
   status: JobStatus;
   budgetLimit: number;
+  workMode?: WorkMode | string;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
   createdAt: string;
 }
 export type ApprovalStatus = "NONE" | "PENDING" | "APPROVED" | "REJECTED";

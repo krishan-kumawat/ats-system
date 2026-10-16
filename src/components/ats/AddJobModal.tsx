@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Job, JobStatus, AuditEntry } from "@/lib/atsStore";
-import { createJobAction, updateJobAction, fetchDepartmentsAction, DepartmentOption } from "@/app/actions/jobs";
-import { fetchHiringManagerUsersAction, UserOption } from "@/app/actions/assignments";
+import { Job, JobStatus, AuditEntry, WorkMode } from "@/lib/atsStore";
+import { createJobAction, updateJobAction, fetchDepartmentsAction, type DepartmentOption } from "@/app/actions/jobs";
+import { fetchHiringManagerUsersAction, type UserOption } from "@/app/actions/assignments";
 import { ROLE_META } from "@/lib/permissions";
 import { UserRole } from "@/lib/enums";
 
@@ -15,12 +15,16 @@ interface AddJobModalProps {
   jobId?: string;
   initialValues?: {
     title: string;
+    description?: string;
     department: string;
     departmentId?: string;
     status: JobStatus;
     budget: string;
     hiringManagerName?: string;
     hiringManagerId?: string;
+    workMode?: WorkMode | string;
+    salaryMin?: string | number;
+    salaryMax?: string | number;
   };
 }
 
@@ -31,6 +35,8 @@ const STATUS_OPTIONS: { value: JobStatus; label: string }[] = [
   { value: "CLOSED", label: "Closed" },
 ];
 
+const WORK_MODES: WorkMode[] = ["Hybrid", "On-site", "Remote"];
+
 export default function AddJobModal({
   onClose,
   onSave,
@@ -40,8 +46,12 @@ export default function AddJobModal({
   initialValues,
 }: AddJobModalProps) {
   const [title, setTitle] = useState(initialValues?.title || "");
+  const [description, setDescription] = useState(initialValues?.description || "");
   const [status, setStatus] = useState<JobStatus>(initialValues?.status || "OPEN");
+  const [workMode, setWorkMode] = useState<WorkMode>((initialValues?.workMode as WorkMode) || "Hybrid");
   const [budget, setBudget] = useState(initialValues?.budget || "");
+  const [salaryMin, setSalaryMin] = useState(initialValues?.salaryMin != null ? String(initialValues.salaryMin) : "");
+  const [salaryMax, setSalaryMax] = useState(initialValues?.salaryMax != null ? String(initialValues.salaryMax) : "");
   const [saving, setSaving] = useState(false);
 
   // Department combobox state
@@ -104,9 +114,21 @@ export default function AddJobModal({
 
   useEffect(() => {
     if (initialValues?.title) setTitle(initialValues.title);
+    if (initialValues?.description) setDescription(initialValues.description);
     if (initialValues?.status) setStatus(initialValues.status);
+    if (initialValues?.workMode) setWorkMode(initialValues.workMode as WorkMode);
     if (initialValues?.budget != null && initialValues.budget !== "") setBudget(String(initialValues.budget));
-  }, [initialValues?.title, initialValues?.status, initialValues?.budget]);
+    if (initialValues?.salaryMin != null && initialValues.salaryMin !== "") setSalaryMin(String(initialValues.salaryMin));
+    if (initialValues?.salaryMax != null && initialValues.salaryMax !== "") setSalaryMax(String(initialValues.salaryMax));
+  }, [
+    initialValues?.title,
+    initialValues?.description,
+    initialValues?.status,
+    initialValues?.workMode,
+    initialValues?.budget,
+    initialValues?.salaryMin,
+    initialValues?.salaryMax,
+  ]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -148,6 +170,10 @@ export default function AddJobModal({
       onToast("Missing Field", "Job title is required.", "ban");
       return;
     }
+    if (!description.trim()) {
+      onToast("Missing Field", "Job description is required.", "ban");
+      return;
+    }
     const finalDept = selectedDept?.name || deptQuery.trim();
     if (!finalDept) {
       onToast("Missing Field", "Department is required.", "ban");
@@ -158,17 +184,34 @@ export default function AddJobModal({
       return;
     }
 
+    if (salaryMin && Number(salaryMin) < 0) {
+      onToast("Invalid Value", "Minimum salary cannot be negative.", "ban");
+      return;
+    }
+    if (salaryMax && Number(salaryMax) < 0) {
+      onToast("Invalid Value", "Maximum salary cannot be negative.", "ban");
+      return;
+    }
+    if (salaryMin && salaryMax && Number(salaryMin) > Number(salaryMax)) {
+      onToast("Invalid Value", "Minimum salary cannot exceed maximum salary.", "ban");
+      return;
+    }
+
     setSaving(true);
 
     if (mode === "edit") {
       const result = await updateJobAction(jobId!, {
         title: title.trim(),
+        description: description.trim(),
         department: finalDept,
         departmentId: selectedDept?.id,
         hiringManager: selectedHM.name,
         hiringManagerId: selectedHM.id,
         status,
         budgetLimit: budget ? parseInt(budget) : 0,
+        workMode,
+        salaryMin: salaryMin ? parseInt(salaryMin) : undefined,
+        salaryMax: salaryMax ? parseInt(salaryMax) : undefined,
       });
 
       if (result.error) {
@@ -183,7 +226,7 @@ export default function AddJobModal({
         user: "System",
         action: "EDITED_JOB",
         target: `${job.id} (${job.title})`,
-        notes: `Job requisition updated. Department: ${finalDept}. HM: ${selectedHM.name}. Budget: ₹${(budget ? parseInt(budget) : 0).toLocaleString("en-IN")}.`,
+        notes: `Job requisition updated. Department: ${finalDept}. HM: ${selectedHM.name}. Work Mode: ${workMode}. Budget: ₹${(budget ? parseInt(budget) : 0).toLocaleString("en-IN")}.`,
       };
 
       onSave(job, audit);
@@ -191,12 +234,16 @@ export default function AddJobModal({
     } else {
       const result = await createJobAction({
         title: title.trim(),
+        description: description.trim(),
         department: finalDept,
         departmentId: selectedDept?.id,
         hiringManager: selectedHM.name,
         hiringManagerId: selectedHM.id,
         status,
         budgetLimit: budget ? parseInt(budget) : 0,
+        workMode,
+        salaryMin: salaryMin ? parseInt(salaryMin) : undefined,
+        salaryMax: salaryMax ? parseInt(salaryMax) : undefined,
       });
 
       if (result.error) {
@@ -211,7 +258,7 @@ export default function AddJobModal({
         user: "System",
         action: mode === "clone" ? "CLONED_JOB" : "CREATED_JOB",
         target: `${job.id} (${job.title})`,
-        notes: `Job requisition ${mode === "clone" ? "cloned" : "created"}. Department: ${finalDept}. HM: ${selectedHM.name}. Budget: ₹${(budget ? parseInt(budget) : 0).toLocaleString("en-IN")}.`,
+        notes: `Job requisition ${mode === "clone" ? "cloned" : "created"}. Department: ${finalDept}. HM: ${selectedHM.name}. Work Mode: ${workMode}. Budget: ₹${(budget ? parseInt(budget) : 0).toLocaleString("en-IN")}.`,
       };
 
       onSave(job, audit);
@@ -228,7 +275,7 @@ export default function AddJobModal({
 
   return (
     <div className="fixed inset-0 bg-slate-950/40 dark:bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col transition-colors duration-200">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col transition-colors duration-200 max-h-[90vh] overflow-hidden">
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between rounded-t-2xl">
@@ -246,7 +293,7 @@ export default function AddJobModal({
         </div>
 
         {/* Body */}
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 overflow-y-auto">
 
           {/* Title */}
           <div>
@@ -262,7 +309,21 @@ export default function AddJobModal({
             />
           </div>
 
-          {/* Department combobox + Status */}
+          {/* Description */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+              Description <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Job requisition description…"
+              rows={3}
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none"
+            />
+          </div>
+
+          {/* Department + Hiring Manager row */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
@@ -345,20 +406,7 @@ export default function AddJobModal({
               )}
             </div>
 
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Status</label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as JobStatus)}
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-              >
-                {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* Hiring Manager combobox + Budget */}
-          <div className="grid grid-cols-2 gap-4">
+            {/* Hiring Manager combobox */}
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                 Hiring Manager <span className="text-red-500">*</span>
@@ -447,7 +495,47 @@ export default function AddJobModal({
                 </div>
               )}
             </div>
+          </div>
 
+          {/* Status + Work Mode row */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Status</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as JobStatus)}
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+              >
+                {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
+
+            {/* Work Mode */}
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                Work Mode <span className="text-red-500">*</span>
+              </label>
+              <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg">
+                {WORK_MODES.map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setWorkMode(mode)}
+                    className={`py-1.5 text-xs font-semibold rounded-md transition-all ${
+                      workMode === mode
+                        ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Financials: Budget + Salary Range (3 columns) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                 Budget Ceiling (₹)
@@ -458,9 +546,48 @@ export default function AddJobModal({
                 </span>
                 <input
                   type="number"
+                  min="0"
                   value={budget}
                   onChange={(e) => setBudget(e.target.value)}
-                  placeholder="e.g. 150000"
+                  placeholder="e.g. 160000"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-7 pr-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                Min Salary (₹)
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 pointer-events-none text-xs">
+                  ₹
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  value={salaryMin}
+                  onChange={(e) => setSalaryMin(e.target.value)}
+                  placeholder="e.g. 120000"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-7 pr-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                Max Salary (₹)
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 pointer-events-none text-xs">
+                  ₹
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  value={salaryMax}
+                  onChange={(e) => setSalaryMax(e.target.value)}
+                  placeholder="e.g. 160000"
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-7 pr-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                 />
               </div>

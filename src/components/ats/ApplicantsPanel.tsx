@@ -2,11 +2,11 @@
 
 
 import { useState, useEffect, useTransition, useRef } from "react";
-import { fetchApplicantsAction, Applicant } from "@/app/actions/data";
+import { fetchApplicantsAction, type Applicant } from "@/app/actions/data";
 import {
   fetchHiringManagerUsersAction,
   reassignApplicantHMAction,
-  UserOption,
+  type UserOption,
 } from "@/app/actions/assignments";
 import { ROLE_META } from "@/lib/permissions";
 import { UserRole } from "@/lib/enums";

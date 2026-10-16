@@ -15,6 +15,10 @@ export interface CreateJobInput {
   hiringManagerId?: string;
   status: JobStatus;
   budgetLimit: number;
+  description?: string;
+  workMode?: string;
+  salaryMin?: number;
+  salaryMax?: number;
 }
 
 
@@ -53,6 +57,9 @@ export async function createJobSimpleAction(input: {
   hiringManager?: string;
   status?: JobStatus;
   budgetLimit?: number;
+  workMode?: string;
+  salaryMin?: number;
+  salaryMax?: number;
 }): Promise<{ job: Job; error?: string }> {
   const session = await getSession();
   if (!session || !session.accessToken) return { job: {} as Job, error: "Unauthorized" };
@@ -77,6 +84,15 @@ export async function createJobSimpleAction(input: {
     }
     if (input.budgetLimit != null) {
       body.budgetLimit = input.budgetLimit;
+    }
+    if (input.workMode) {
+      body.workMode = input.workMode;
+    }
+    if (input.salaryMin != null) {
+      body.salaryMin = input.salaryMin;
+    }
+    if (input.salaryMax != null) {
+      body.salaryMax = input.salaryMax;
     }
 
 
@@ -127,12 +143,18 @@ export async function createJobSimpleAction(input: {
       job: {
         id: createdJob.id,
         title: createdJob.title,
+        description: createdJob.description || input.description || "",
         department: createdJob.department?.name || input.departmentName || "",
+        departmentId: createdJob.departmentId || input.departmentId || "",
+        ownerId: createdJob.ownerId || input.ownerId || "",
         hiringManager: input.hiringManager || (createdJob.owner
           ? `${createdJob.owner.firstName} ${createdJob.owner.lastName}`
           : session.name || "System"),
         status: (createdJob.status || "DRAFT").toUpperCase().replace(/ /g, "_") as unknown as JobStatus,
         budgetLimit: Number(createdJob.budgetLimit || 0),
+        workMode: createdJob.workMode || input.workMode,
+        salaryMin: createdJob.salaryMin != null ? Number(createdJob.salaryMin) : (input.salaryMin != null ? Number(input.salaryMin) : null),
+        salaryMax: createdJob.salaryMax != null ? Number(createdJob.salaryMax) : (input.salaryMax != null ? Number(input.salaryMax) : null),
         createdAt: createdJob.createdAt ? String(createdJob.createdAt).slice(0, 10) : "",
       },
     };
@@ -181,7 +203,7 @@ export async function createJobAction(input: CreateJobInput): Promise<{ job: Job
     // 2. Create Job
     const jobBody: Record<string, unknown> = {
       title: input.title,
-      description: `Job posting for ${input.title} in ${input.department}.`,
+      description: input.description || `Job posting for ${input.title} in ${input.department}.`,
       departmentId: input.departmentId || dept?.id || undefined,
     };
     if (input.hiringManagerId) {
@@ -189,6 +211,15 @@ export async function createJobAction(input: CreateJobInput): Promise<{ job: Job
     }
     if (input.budgetLimit != null) {
       jobBody.budgetLimit = input.budgetLimit;
+    }
+    if (input.workMode) {
+      jobBody.workMode = input.workMode;
+    }
+    if (input.salaryMin != null) {
+      jobBody.salaryMin = input.salaryMin;
+    }
+    if (input.salaryMax != null) {
+      jobBody.salaryMax = input.salaryMax;
     }
     const createJobRes = await fetch(`${API_BASE_URL}/api/v1/jobs`, {
       method: "POST",
@@ -238,10 +269,16 @@ export async function createJobAction(input: CreateJobInput): Promise<{ job: Job
       job: {
         id: createdJob.id,
         title: createdJob.title,
+        description: createdJob.description || input.description || "",
         department: dept?.name || input.department,
+        departmentId: createdJob.departmentId || input.departmentId || dept?.id || "",
+        ownerId: createdJob.ownerId || input.hiringManagerId || "",
         hiringManager: input.hiringManager || session.name || "System Admin",
         status: (createdJob.status || "DRAFT").toUpperCase().replace(/ /g, "_") as JobStatus,
         budgetLimit: Number(createdJob.budgetLimit || input.budgetLimit || 0),
+        workMode: createdJob.workMode || input.workMode,
+        salaryMin: createdJob.salaryMin != null ? Number(createdJob.salaryMin) : (input.salaryMin != null ? Number(input.salaryMin) : null),
+        salaryMax: createdJob.salaryMax != null ? Number(createdJob.salaryMax) : (input.salaryMax != null ? Number(input.salaryMax) : null),
         createdAt: createdJob.createdAt ? String(createdJob.createdAt).slice(0, 10) : "",
       },
     };
@@ -264,45 +301,67 @@ export async function updateJobAction(jobId: string, input: CreateJobInput): Pro
     };
 
 
-    // 1. Resolve or Create Department on Backend
-    const deptRes = await fetch(`${API_BASE_URL}/api/v1/departments`, {
-      headers: { Authorization: `Bearer ${session.accessToken}` },
-    });
-    const departments = deptRes.ok ? await deptRes.json() : [];
-    let dept = departments.find(
-      (d: any) => d.name.toLowerCase() === input.department.toLowerCase()
-    );
+    // 1. Resolve departmentId if not already provided
+    let departmentId = input.departmentId;
+    let deptName = input.department;
 
+    if (!departmentId && input.department?.trim()) {
+      try {
+        const deptRes = await fetch(`${API_BASE_URL}/api/v1/departments`, {
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        });
+        const rawDepts = deptRes.ok ? await deptRes.json() : [];
+        const depts = Array.isArray(rawDepts) ? rawDepts : (rawDepts.data || []);
+        let dept = depts.find(
+          (d: any) => d.name && d.name.toLowerCase() === input.department.trim().toLowerCase()
+        );
 
-    if (!dept && input.department.trim()) {
-      const code = input.department.trim().toUpperCase().replace(/[\s_-]+/g, "_");
-      const createDeptRes = await fetch(`${API_BASE_URL}/api/v1/departments`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ name: input.department.trim(), code }),
-      });
-      if (createDeptRes.ok) {
-        dept = await createDeptRes.json();
+        if (!dept) {
+          const code = input.department.trim().toUpperCase().replace(/[\s_-]+/g, "_");
+          const createDeptRes = await fetch(`${API_BASE_URL}/api/v1/departments`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ name: input.department.trim(), code }),
+          });
+          if (createDeptRes.ok) {
+            dept = await createDeptRes.json();
+          }
+        }
+        if (dept) {
+          departmentId = dept.id;
+          deptName = dept.name;
+        }
+      } catch (deptErr) {
+        console.warn("[updateJobAction] Department lookup warning:", deptErr);
       }
     }
 
 
-    const statusMap2: Record<string, string> = { OPEN: "Open", DRAFT: "Draft", ON_HOLD: "On Hold", CLOSED: "Closed" };
-    const targetStatus = statusMap2[input.status] || "Draft";
-
-
-    // 2. Update Job on Backend
+    // 2. Build payload matching updated Job API requirements:
+    // { title, description, departmentId, budgetLimit, workMode, salaryMin, salaryMax }
     const updateBody: Record<string, unknown> = {
       title: input.title,
-      status: targetStatus,
-      departmentId: input.departmentId || dept?.id || null,
     };
-    if (input.hiringManagerId) {
-      updateBody.ownerId = input.hiringManagerId;
+    if (input.description) {
+      updateBody.description = input.description;
     }
-    if (input.budgetLimit != null) {
-      updateBody.budgetLimit = input.budgetLimit;
+    if (departmentId) {
+      updateBody.departmentId = departmentId;
     }
+    if (input.budgetLimit != null && !isNaN(Number(input.budgetLimit))) {
+      updateBody.budgetLimit = Number(input.budgetLimit);
+    }
+    if (input.workMode) {
+      updateBody.workMode = input.workMode;
+    }
+    if (input.salaryMin != null && !isNaN(Number(input.salaryMin))) {
+      updateBody.salaryMin = Number(input.salaryMin);
+    }
+    if (input.salaryMax != null && !isNaN(Number(input.salaryMax))) {
+      updateBody.salaryMax = Number(input.salaryMax);
+    }
+
+
     const res = await fetch(`${API_BASE_URL}/api/v1/jobs/${jobId}`, {
       method: "PATCH",
       headers,
@@ -312,7 +371,14 @@ export async function updateJobAction(jobId: string, input: CreateJobInput): Pro
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      return { error: errData.message || "Failed to update job requisition." };
+      const rawMsg = errData.message || errData.error;
+      const errMsg = Array.isArray(rawMsg)
+        ? rawMsg.join(", ")
+        : typeof rawMsg === "string"
+        ? rawMsg
+        : `Failed to update job requisition (${res.status}).`;
+      console.error("[updateJobAction] backend responded with error:", res.status, errMsg);
+      return { error: errMsg };
     }
 
 
@@ -322,12 +388,18 @@ export async function updateJobAction(jobId: string, input: CreateJobInput): Pro
 
     return {
       job: {
-        id: updatedJob.id,
-        title: updatedJob.title,
-        department: dept?.name || input.department,
-        hiringManager: input.hiringManager,
-        status: (updatedJob.status || "DRAFT").toUpperCase().replace(/ /g, "_") as JobStatus,
-        budgetLimit: Number(updatedJob.budgetLimit || input.budgetLimit || 0),
+        id: updatedJob.id || jobId,
+        title: updatedJob.title || input.title,
+        description: updatedJob.description || input.description || "",
+        department: updatedJob.department?.name || deptName || input.department || "",
+        departmentId: updatedJob.departmentId || departmentId || "",
+        ownerId: updatedJob.ownerId || input.hiringManagerId || "",
+        hiringManager: input.hiringManager || (updatedJob.owner ? `${updatedJob.owner.firstName || ""} ${updatedJob.owner.lastName || ""}`.trim() : ""),
+        status: (updatedJob.status || input.status || "DRAFT").toUpperCase().replace(/ /g, "_") as JobStatus,
+        budgetLimit: Number(updatedJob.budgetLimit ?? input.budgetLimit ?? 0),
+        workMode: updatedJob.workMode || input.workMode || "Hybrid",
+        salaryMin: updatedJob.salaryMin != null ? Number(updatedJob.salaryMin) : (input.salaryMin != null ? Number(input.salaryMin) : null),
+        salaryMax: updatedJob.salaryMax != null ? Number(updatedJob.salaryMax) : (input.salaryMax != null ? Number(input.salaryMax) : null),
         createdAt: updatedJob.createdAt ? String(updatedJob.createdAt).slice(0, 10) : "",
       },
     };
@@ -347,6 +419,9 @@ export async function updateJobSimpleAction(
     departmentId?: string;
     ownerId?: string;
     budgetLimit?: number;
+    workMode?: string;
+    salaryMin?: number;
+    salaryMax?: number;
   }
 ): Promise<{ success: boolean; error?: string }> {
   const session = await getSession();
@@ -360,23 +435,24 @@ export async function updateJobSimpleAction(
     };
 
 
-    const statusMap: Record<string, string> = { OPEN: "Open", DRAFT: "Draft", ON_HOLD: "On Hold", CLOSED: "Closed" };
-    const backendStatus = statusMap[input.status] || "Draft";
-
-
     const body: Record<string, unknown> = {
       title: input.title,
       description: input.description,
-      status: backendStatus,
     };
     if (input.departmentId) {
       body.departmentId = input.departmentId;
     }
-    if (input.ownerId) {
-      body.ownerId = input.ownerId;
+    if (input.budgetLimit != null && !isNaN(Number(input.budgetLimit))) {
+      body.budgetLimit = Number(input.budgetLimit);
     }
-    if (input.budgetLimit != null) {
-      body.budgetLimit = input.budgetLimit;
+    if (input.workMode) {
+      body.workMode = input.workMode;
+    }
+    if (input.salaryMin != null && !isNaN(Number(input.salaryMin))) {
+      body.salaryMin = Number(input.salaryMin);
+    }
+    if (input.salaryMax != null && !isNaN(Number(input.salaryMax))) {
+      body.salaryMax = Number(input.salaryMax);
     }
 
 
@@ -389,7 +465,13 @@ export async function updateJobSimpleAction(
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      return { success: false, error: errData.message || "Failed to update job." };
+      const rawMsg = errData.message || errData.error;
+      const errMsg = Array.isArray(rawMsg)
+        ? rawMsg.join(", ")
+        : typeof rawMsg === "string"
+        ? rawMsg
+        : `Failed to update job (${res.status}).`;
+      return { success: false, error: errMsg };
     }
 
 

@@ -69,6 +69,7 @@ export default function ObjectWorkspace({
   const [showAddModal, setShowAddModal] = useState(false);
   const [activeCandidateId, setActiveCandidateId] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedJobRecord, setSelectedJobRecord] = useState<any | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   const toastTimer = useRef<NodeJS.Timeout | null>(null);
@@ -206,17 +207,21 @@ export default function ObjectWorkspace({
 
   function handleJobUpdate(updatedJob: Job, audit: AuditEntry) {
     setJobs((prev) => prev.map((j) => (j.id === updatedJob.id ? updatedJob : j)));
+    setSelectedJobRecord(updatedJob);
     setAuditLogs((prev) => [...prev, audit]);
   }
 
   function handleJobDelete(jobId: string) {
     setJobs((prev) => prev.filter((j) => j.id !== jobId));
+    setSelectedJobId(null);
+    setSelectedJobRecord(null);
   }
 
   function handleJobClone(clonedJob: Job, audit: AuditEntry) {
     setJobs((prev) => [...prev, clonedJob]);
     setAuditLogs((prev) => [...prev, audit]);
     setSelectedJobId(clonedJob.id);
+    setSelectedJobRecord(clonedJob);
   }
 
   const allocated = candidates.reduce(
@@ -246,11 +251,15 @@ export default function ObjectWorkspace({
     Job: selectedJobId ? (
       <JobRecordPage
         jobId={selectedJobId}
+        jobRecord={selectedJobRecord}
         jobs={jobs}
         candidates={candidates}
         auditLogs={auditLogs}
         role={role}
-        onBack={() => setSelectedJobId(null)}
+        onBack={() => {
+          setSelectedJobId(null);
+          setSelectedJobRecord(null);
+        }}
         onToast={showToast}
         onJobUpdate={handleJobUpdate}
         onJobDelete={handleJobDelete}
@@ -259,7 +268,10 @@ export default function ObjectWorkspace({
     ) : (
       <GenericDataGrid
         objectApiName="Job"
-        onRowClick={(id) => setSelectedJobId(id)}
+        onRowClick={(id, record) => {
+          setSelectedJobId(id);
+          setSelectedJobRecord(record);
+        }}
       />
     ),
     User: selectedUserId ? (
@@ -291,6 +303,7 @@ export default function ObjectWorkspace({
 
   React.useEffect(() => {
     setSelectedJobId(null);
+    setSelectedJobRecord(null);
     setSelectedUserId(null);
   }, [normName]);
 

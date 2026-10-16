@@ -6,7 +6,7 @@ import {
   createUserAction,
   updateUserAction,
   toggleUserActiveAction,
-  UserRow,
+  type UserRow,
 } from "@/app/actions/users";
 import { UserRole } from "@/lib/enums";
 import { ROLE_META } from "@/lib/permissions";
