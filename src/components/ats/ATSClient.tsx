@@ -32,6 +32,7 @@ import ApplicantsPanel from "@/components/ats/ApplicantsPanel";
 import JobAssignmentPanel from "@/components/ats/JobAssignmentPanel";
 import UsersPanel from "@/components/ats/UsersPanel";
 import UserRecordPanel from "@/components/ats/UserRecordPanel";
+import HomePanel from "@/components/ats/HomePanel";
 
 
 const TOTAL_BUDGET = 1200000;
@@ -80,25 +81,7 @@ export default function ATSClient({
   const initialAuditLogs = initialData?.auditLogs ?? propsAuditLogs ?? [];
 
 
-  const [tab, setTab] = useState<Tab>(() => {
-    const isAdmin = user.role === UserRole.ADMIN;
-    const permissions = isAdmin
-      ? { canViewCandidates: true, canViewJobs: true }
-      : user.profile?.permissions || {};
-
-
-    const canViewCandidates = isAdmin || permissions.canViewCandidates !== false;
-    const canViewJobs = isAdmin || permissions.canViewJobs !== false;
-
-
-    if (canViewCandidates) {
-      return "pipeline";
-    }
-    if (canViewJobs) {
-      return "jobs";
-    }
-    return "pipeline";
-  });
+  const [tab, setTab] = useState<Tab>("home");
 
 
   const [role, setRole] = useState<Role>("founder");
@@ -311,6 +294,16 @@ export default function ATSClient({
 
 
           <div className="flex-1 flex flex-col overflow-hidden p-6">
+            {tab === "home" && (
+              <HomePanel
+                user={user}
+                onNavigate={(t) => {
+                  setTab(t as Tab);
+                  setSelectedUserId(null);
+                }}
+              />
+            )}
+
             {tab === "pipeline" && (
               <PipelineBoard
                 candidates={candidates}

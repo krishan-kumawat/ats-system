@@ -35,6 +35,7 @@ export default async function DynamicObjectPage({ params }: PageProps) {
     // Normalize objectApiName
     let normName = objectApiName;
     const lower = normName.toLowerCase();
+    if (lower === "home") redirect("/");
     if (lower === "jobs") normName = "Job";
     else if (lower === "candidates") normName = "Candidate";
     else if (lower === "departments") normName = "Department";

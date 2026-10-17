@@ -82,10 +82,30 @@ export default function Sidebar({
             Navigation
           </div>
           <nav className="space-y-1">
+            {/* Pinned Home Tab */}
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== "undefined" && window.location.pathname === "/") {
+                  onTabChange("home");
+                } else {
+                  window.location.href = "/";
+                }
+              }}
+              className={(tab || "").toLowerCase() === "home" ? active : inactive}
+            >
+              <span className="flex items-center gap-3">
+                <i className="fa-solid fa-house" />
+                <span>Home</span>
+              </span>
+            </button>
+
             {loading ? (
               <div className="py-4 text-center text-xs text-slate-400">Loading tabs...</div>
             ) : (
-              navigationTabs.map((tabItem) => {
+              navigationTabs
+                .filter((tabItem) => (tabItem.apiName || "").toLowerCase() !== "home")
+                .map((tabItem) => {
                 let icon = "fa-solid fa-folder";
                 if (tabItem.iconName === "briefcase") icon = "fa-solid fa-briefcase";
                 else if (tabItem.iconName === "users") icon = "fa-solid fa-users";

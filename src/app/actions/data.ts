@@ -344,6 +344,7 @@ export async function fetchJobDetailsAction(jobId: string) {
     try {
       const errJson = await res.json();
       msg = errJson.message || msg;
+      console.log('mesg ', errJson.message);
     } catch (_) { }
     throw new Error(msg);
   }

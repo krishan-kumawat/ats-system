@@ -3,7 +3,7 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type Role = "recruiter" | "founder";
-export type Tab = "pipeline" | "analytics" | "audit" | "jobs" | "permissions" | "applicants" | "assignments" | "users";
+export type Tab = "home" | "pipeline" | "analytics" | "audit" | "jobs" | "permissions" | "applicants" | "assignments" | "users";
 export type JobStatus = "OPEN" | "DRAFT" | "ON_HOLD" | "CLOSED";
 
 export type WorkMode = "On-site" | "Remote" | "Hybrid";
