@@ -9,6 +9,7 @@ import { deleteUserAction } from "@/app/actions/users";
 import { deleteJobAction } from "@/app/actions/jobs";
 import CreateJobModal from "@/components/ats/CreateJobModal";
 import EditJobModal from "@/components/ats/EditJobModal";
+import AddCandidateModal from "@/components/ats/AddCandidateModal";
 
 
 interface GenericDataGridProps {
@@ -28,6 +29,7 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [showCreateJobModal, setShowCreateJobModal] = useState(false);
+  const [showCreateCandidateModal, setShowCreateCandidateModal] = useState(false);
   const [editJobRecord, setEditJobRecord] = useState<any | null>(null);
 
 
@@ -193,6 +195,8 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
             onClick={() => {
               if (objectApiName === "Job") {
                 setShowCreateJobModal(true);
+              } else if (objectApiName === "Candidate") {
+                setShowCreateCandidateModal(true);
               }
             }}
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
@@ -442,6 +446,16 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
           onClose={() => setEditJobRecord(null)}
           onSaved={() => {
             setEditJobRecord(null);
+            reloadRecords();
+          }}
+          onToast={showGridToast}
+        />
+      )}
+
+      {showCreateCandidateModal && (
+        <AddCandidateModal
+          onClose={() => setShowCreateCandidateModal(false)}
+          onSave={(_cand, _audit) => {
             reloadRecords();
           }}
           onToast={showGridToast}

@@ -235,24 +235,60 @@ export async function movePipelineAction(
 
 
 export interface IngestCandidateInput {
-  name: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   phone?: string;
-  role: string;
-  department: string;
-  skills: string[];
-  expectedSalary: number;
-  jobId?: string;
+  currentLocation?: string;
+  totalExperience?: number;
+  currentCompany?: string;
+  currentDesignation?: string;
+  linkedinUrl?: string;
+  source?: string;
+  candidateStatus?: string;
+  jobId: string;
+  name?: string;
+  role?: string;
+  department?: string;
+  skills?: string[];
+  expectedSalary?: number;
   sourceTag?: string;
 }
 
+export interface JobOption {
+  id: string;
+  title: string;
+  department?: string;
+  status?: string;
+}
+
+export async function fetchJobsListAction(): Promise<JobOption[]> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return [];
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/v1/jobs`, {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const list = Array.isArray(data) ? data : data.jobs || data.data || [];
+    return list.map((j: any) => ({
+      id: j.id,
+      title: j.title || "Untitled Job",
+      department: typeof j.department === "object" ? j.department?.name : j.department || "",
+      status: j.status || "OPEN",
+    }));
+  } catch {
+    return [];
+  }
+}
 
 export async function ingestCandidateAction(
   input: IngestCandidateInput
-): Promise<{ applicationId: string; error?: string }> {
+): Promise<{ applicationId: string; candidateId?: string; error?: string }> {
   const session = await getSession();
   if (!session || !session.accessToken) return { applicationId: "", error: "Unauthorized" };
-
 
   try {
     const headers = {
@@ -260,72 +296,166 @@ export async function ingestCandidateAction(
       "Content-Type": "application/json",
     };
 
+    // 1. Resolve first name and last name
+    let firstName = input.firstName?.trim();
+    let lastName = input.lastName?.trim();
+    if (!firstName && input.name) {
+      const parts = input.name.trim().split(/\s+/);
+      firstName = parts[0] || "";
+      lastName = parts.slice(1).join(" ") || "Candidate";
+    }
 
-    // 1. Split name into first and last name
-    const nameParts = input.name.trim().split(/\s+/);
-    const firstName = nameParts[0] || "";
-    const lastName = nameParts.slice(1).join(" ") || "Candidate";
+    const candidatePayload: Record<string, any> = {
+      firstName: firstName || "",
+      lastName: lastName || "",
+      email: input.email.toLowerCase().trim(),
+      jobId: input.jobId?.trim(),
+    };
 
+    if (input.phone?.trim()) candidatePayload.phone = input.phone.trim();
+    if (input.currentLocation?.trim()) candidatePayload.currentLocation = input.currentLocation.trim();
+    if (input.totalExperience !== undefined && !isNaN(Number(input.totalExperience))) {
+      candidatePayload.totalExperience = Number(input.totalExperience);
+    }
+    if (input.currentCompany?.trim()) candidatePayload.currentCompany = input.currentCompany.trim();
+    if (input.currentDesignation?.trim()) candidatePayload.currentDesignation = input.currentDesignation.trim();
+    if (input.linkedinUrl?.trim()) candidatePayload.linkedinUrl = input.linkedinUrl.trim();
+    if (input.source?.trim()) candidatePayload.source = input.source.trim();
+    if (input.candidateStatus?.trim()) candidatePayload.candidateStatus = input.candidateStatus.trim();
+    if (Array.isArray(input.skills) && input.skills.length > 0) {
+      candidatePayload.skills = input.skills;
+    }
 
-    // 2. Create Candidate profile
+    // 2. Create Candidate profile with jobId in payload (backend handles job linking)
     const createCandRes = await fetch(`${API_BASE_URL}/api/v1/candidates`, {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        firstName,
-        lastName,
-        email: input.email.toLowerCase().trim(),
-        phone: input.phone || undefined,
-        skills: input.skills || [],
-      }),
+      body: JSON.stringify(candidatePayload),
     });
-
 
     if (!createCandRes.ok) {
       const errData = await createCandRes.json().catch(() => ({}));
-      return { applicationId: "", error: errData.message || "Failed to create candidate profile on backend." };
+      const msg = Array.isArray(errData.message)
+        ? errData.message.join(", ")
+        : errData.message || "Failed to create candidate profile on backend.";
+      return { applicationId: "", error: msg };
     }
-
 
     const candidate = await createCandRes.json();
-    const targetJobId = input.jobId || "unassigned";
-
-
-    // 3. Link candidate to job
-    const linkRes = await fetch(`${API_BASE_URL}/api/v1/candidates/${candidate.id}/jobs`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        jobId: targetJobId,
-        status: "Applied",
-      }),
-    });
-
-
-    if (!linkRes.ok) {
-      const errData = await linkRes.json().catch(() => ({}));
-      return { applicationId: "", error: errData.message || "Failed to link candidate to job." };
-    }
-
-
-    // 4. Update expectedSalary and sourceTag on the linked CandidateJob record
-    await fetch(`${API_BASE_URL}/api/v1/candidates/${candidate.id}/jobs/${targetJobId}`, {
-      method: "PATCH",
-      headers,
-      body: JSON.stringify({
-        expectedSalary: Number(input.expectedSalary) || 0,
-        sourceTag: input.sourceTag || "Manual PDF Upload",
-      }),
-    });
-
+    const targetJobId = input.jobId?.trim();
 
     revalidatePath("/");
-    return { applicationId: `${candidate.id}::${targetJobId}` };
+    revalidatePath("/[objectApiName]");
+    return {
+      applicationId: targetJobId ? `${candidate.id}::${targetJobId}` : candidate.id,
+      candidateId: candidate.id,
+    };
   } catch (err) {
     console.error("[ingestCandidateAction]", err);
-    return { applicationId: "", error: "Failed to ingest candidate." };
+    return { applicationId: "", error: err instanceof Error ? err.message : "Failed to ingest candidate." };
   }
 }
+
+export interface UpdateCandidateInput {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  currentLocation?: string;
+  totalExperience?: number;
+  currentCompany?: string;
+  currentDesignation?: string;
+  linkedinUrl?: string;
+  source?: string;
+  candidateStatus?: string;
+  resumeUrl?: string;
+  skills?: string[];
+}
+
+export async function updateCandidateAction(
+  candidateId: string,
+  input: UpdateCandidateInput
+): Promise<{ success: boolean; candidate?: any; error?: string }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { success: false, error: "Unauthorized" };
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
+
+    const updatePayload: Record<string, any> = {};
+    if (input.firstName !== undefined) updatePayload.firstName = input.firstName.trim();
+    if (input.lastName !== undefined) updatePayload.lastName = input.lastName.trim();
+    if (input.email !== undefined) updatePayload.email = input.email.toLowerCase().trim();
+    if (input.phone !== undefined) updatePayload.phone = input.phone.trim();
+    if (input.currentLocation !== undefined) updatePayload.currentLocation = input.currentLocation.trim();
+    if (input.totalExperience !== undefined && !isNaN(Number(input.totalExperience))) {
+      updatePayload.totalExperience = Number(input.totalExperience);
+    }
+    if (input.currentCompany !== undefined) updatePayload.currentCompany = input.currentCompany.trim();
+    if (input.currentDesignation !== undefined) updatePayload.currentDesignation = input.currentDesignation.trim();
+    if (input.linkedinUrl !== undefined) updatePayload.linkedinUrl = input.linkedinUrl.trim();
+    if (input.resumeUrl !== undefined) updatePayload.resumeUrl = input.resumeUrl.trim();
+    if (input.source !== undefined) updatePayload.source = input.source.trim();
+    if (input.candidateStatus !== undefined) updatePayload.candidateStatus = input.candidateStatus.trim();
+    if (Array.isArray(input.skills)) updatePayload.skills = input.skills;
+
+    const res = await fetch(`${API_BASE_URL}/api/v1/candidates/${candidateId}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(updatePayload),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const msg = Array.isArray(errData.message)
+        ? errData.message.join(", ")
+        : errData.message || "Failed to update candidate profile.";
+      return { success: false, error: msg };
+    }
+
+    const candidate = await res.json();
+    revalidatePath("/");
+    revalidatePath("/[objectApiName]");
+    return { success: true, candidate };
+  } catch (err) {
+    console.error("[updateCandidateAction]", err);
+    return { success: false, error: err instanceof Error ? err.message : "Failed to update candidate." };
+  }
+}
+
+export async function deleteCandidateAction(
+  candidateId: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { success: false, error: "Unauthorized" };
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/v1/candidates/${candidateId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const msg = Array.isArray(errData.message)
+        ? errData.message.join(", ")
+        : errData.message || "Failed to delete candidate.";
+      return { success: false, error: msg };
+    }
+
+    revalidatePath("/");
+    revalidatePath("/[objectApiName]");
+    return { success: true };
+  } catch (err) {
+    console.error("[deleteCandidateAction]", err);
+    return { success: false, error: err instanceof Error ? err.message : "Failed to delete candidate." };
+  }
+}
+
+
 
 
 

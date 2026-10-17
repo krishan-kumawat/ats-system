@@ -67,6 +67,16 @@ export interface Candidate {
   scorecard: Scorecard;
   founderApproval: FounderApproval;
   jobId?: string;
+  firstName?: string;
+  lastName?: string;
+  currentLocation?: string;
+  totalExperience?: number;
+  currentCompany?: string;
+  currentDesignation?: string;
+  linkedinUrl?: string;
+  source?: string;
+  candidateStatus?: string;
+  resumeUrl?: string;
 }
 
 export interface AuditEntry {

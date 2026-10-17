@@ -1,114 +1,217 @@
 "use client";
 
-import { useState } from "react";
-import { Candidate, AuditEntry, SKILLS_LEXICON, Job } from "@/lib/atsStore";
-import { ingestCandidateAction } from "@/app/actions/scorecard";
+import { useState, useEffect, useRef } from "react";
+import { type Candidate, type AuditEntry, type Job } from "@/lib/atsStore";
+import { ingestCandidateAction, fetchJobsListAction, type JobOption } from "@/app/actions/scorecard";
 
 interface AddCandidateModalProps {
-  jobs: Job[];
+  jobs?: Job[];
   onClose: () => void;
-  onSave: (candidate: Candidate, auditEntry: AuditEntry) => void;
+  onSave?: (candidate: Candidate, auditEntry: AuditEntry) => void;
   onToast: (title: string, msg: string, icon?: string) => void;
 }
 
-type ParserState = "idle" | "parsing" | "done";
+const SOURCE_OPTIONS = [
+  "LinkedIn",
+  "Referral",
+  "Careers Page",
+  "Job Portal",
+  "Other",
+] as const;
 
-const PARSE_STEPS = [
-  { text: "Streaming binary to Google Drive company directories...", progress: 30 },
-  { text: "Reading static character arrays via PDF parser...", progress: 65 },
-  { text: "Mapping candidate profiles against tech dictionary lexicons...", progress: 100 },
-];
-
-const ROLE_OPTIONS = [
-  "Senior Staff Platform Engineer",
-  "Principal Product Manager",
-  "Senior Frontend Engineer",
-  "Lead Data Scientist",
-];
+const STATUS_OPTIONS = [
+  "NEW",
+  "ACTIVE",
+  "ON_HOLD",
+  "REJECTED",
+  "HIRED",
+  "INACTIVE",
+] as const;
 
 export default function AddCandidateModal({
-  jobs,
+  jobs = [],
   onClose,
   onSave,
   onToast,
 }: AddCandidateModalProps) {
-  const [name, setName] = useState("");
+  // Required fields
+  const [selectedJobId, setSelectedJobId] = useState<string>("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState(ROLE_OPTIONS[0]);
-  const [salary, setSalary] = useState("");
-  const [selectedJobId, setSelectedJobId] = useState<string>(jobs[0]?.id ?? "");
-  const [parserState, setParserState] = useState<ParserState>("idle");
-  const [parseProgress, setParseProgress] = useState(0);
-  const [parseStepText, setParseStepText] = useState("");
-  const [discoveredSkills, setDiscoveredSkills] = useState<string[]>([]);
+
+  // Optional fields
+  const [phone, setPhone] = useState("");
+  const [currentLocation, setCurrentLocation] = useState("");
+  const [totalExperience, setTotalExperience] = useState("");
+  const [currentCompany, setCurrentCompany] = useState("");
+  const [currentDesignation, setCurrentDesignation] = useState("");
+  const [linkedinUrl, setLinkedinUrl] = useState("");
+  const [source, setSource] = useState<string>("LinkedIn");
+  const [candidateStatus, setCandidateStatus] = useState<string>("NEW");
+  const [skillsText, setSkillsText] = useState("");
+
+  // Resume File (UI only)
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Job options list state
+  const [availableJobs, setAvailableJobs] = useState<JobOption[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  function triggerParserSimulation() {
-    if (!name.trim()) {
-      onToast("Form Incomplete", "Please enter the candidate name first.", "ban");
-      return;
-    }
-    setParserState("parsing");
-    setParseProgress(0);
+  // Always fetch fresh jobs from the job endpoint on mount and filter to OPEN status
+  useEffect(() => {
+    let isMounted = true;
+    setLoadingJobs(true);
 
-    let stepIdx = 0;
-    function runStep() {
-      if (stepIdx < PARSE_STEPS.length) {
-        setParseStepText(PARSE_STEPS[stepIdx].text);
-        setParseProgress(PARSE_STEPS[stepIdx].progress);
-        stepIdx++;
-        setTimeout(runStep, 1000);
-      } else {
-        const skills = SKILLS_LEXICON[role] ?? ["Resume Parser Standard", "Local Lexicon Match"];
-        setDiscoveredSkills(skills);
-        setParserState("done");
-        onToast("Parser Complete", "File parsed successfully. Tags verified.", "check");
+    fetchJobsListAction()
+      .then((fetched) => {
+        if (!isMounted) return;
+        // Filter to only show jobs with "OPEN" status
+        const openJobs = fetched.filter(
+          (j) => (j.status || "OPEN").toUpperCase() === "OPEN"
+        );
+        setAvailableJobs(openJobs);
+        if (openJobs.length > 0) {
+          setSelectedJobId((prev) =>
+            prev && openJobs.some((j) => j.id === prev) ? prev : openJobs[0].id
+          );
+        }
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        // Fallback to passed jobs if available
+        const openPassed = jobs.filter(
+          (j) => (j.status || "OPEN").toUpperCase() === "OPEN"
+        );
+        const mapped = openPassed.map((j) => ({
+          id: j.id,
+          title: j.title,
+          department: j.department,
+          status: j.status,
+        }));
+        setAvailableJobs(mapped);
+        if (mapped.length > 0) {
+          setSelectedJobId(mapped[0].id);
+        }
+      })
+      .finally(() => {
+        if (isMounted) setLoadingJobs(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [jobs]);
+
+  // Handle file selection
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      const allowedExtensions = [".pdf", ".doc", ".docx"];
+      const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
+      if (!allowedExtensions.includes(ext)) {
+        onToast("Invalid File Type", "Please upload a PDF, DOC, or DOCX file.", "ban");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
       }
+      setResumeFile(file);
     }
-    runStep();
+  }
+
+  function removeFile() {
+    setResumeFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   }
 
   async function handleSave() {
-    if (!name.trim() || !email.trim()) {
-      onToast("Form Incomplete", "Name and email are required.", "ban");
+    // Validation
+    if (!selectedJobId) {
+      onToast("Selection Required", "Please select an associated Job.", "ban");
+      return;
+    }
+    if (!firstName.trim()) {
+      onToast("Required Field", "First Name is required.", "ban");
+      return;
+    }
+    if (!lastName.trim()) {
+      onToast("Required Field", "Last Name is required.", "ban");
+      return;
+    }
+    if (!email.trim()) {
+      onToast("Required Field", "Email Address is required.", "ban");
+      return;
+    }
+    // Basic email format check
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      onToast("Invalid Email", "Please enter a valid email address.", "ban");
       return;
     }
 
     setSaving(true);
 
-    const skills = discoveredSkills.length > 0 ? discoveredSkills : [];
-    const expectedSalary = parseInt(salary) || 120000;
-    const selectedJob = jobs.find((j) => j.id === selectedJobId);
+    const fullName = `${firstName.trim()} ${lastName.trim()}`;
+    const selectedJob = availableJobs.find((j) => j.id === selectedJobId);
 
-    // ── Try DB ingest ────────────────────────────────────────────────────────
+    // Parse comma-separated skills
+    const parsedSkills = skillsText
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
     const result = await ingestCandidateAction({
-      name: name.trim(),
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
       email: email.trim(),
-      phone: "+1 555-0100",
-      role,
-      department: selectedJob?.department ?? "Engineering",
-      skills,
-      expectedSalary,
-      jobId: selectedJobId || undefined,
-      sourceTag: "Manual PDF Upload",
+      phone: phone.trim() || undefined,
+      currentLocation: currentLocation.trim() || undefined,
+      totalExperience: totalExperience ? parseFloat(totalExperience) : undefined,
+      currentCompany: currentCompany.trim() || undefined,
+      currentDesignation: currentDesignation.trim() || undefined,
+      linkedinUrl: linkedinUrl.trim() || undefined,
+      source,
+      candidateStatus,
+      skills: parsedSkills,
+      jobId: selectedJobId,
+      department: selectedJob?.department || "Engineering",
+      role: currentDesignation.trim() || selectedJob?.title || "Candidate",
     });
 
-    const id = result.applicationId || `cnd-${Math.floor(1000 + Math.random() * 9000)}`;
+    if (result.error) {
+      onToast("Error Adding Candidate", result.error, "circle-exclamation");
+      setSaving(false);
+      return;
+    }
+
+    const candidateId = result.candidateId || result.applicationId?.split("::")[0] || `cnd-${Date.now()}`;
 
     const newCandidate: Candidate = {
-      id,
-      name: name.trim(),
+      id: candidateId,
+      name: fullName,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
       email: email.trim(),
-      phone: "+1 555-0100",
-      role,
-      department: selectedJob?.department ?? "Engineering",
+      phone: phone.trim(),
+      currentLocation: currentLocation.trim(),
+      totalExperience: totalExperience ? parseFloat(totalExperience) : undefined,
+      currentCompany: currentCompany.trim(),
+      currentDesignation: currentDesignation.trim(),
+      linkedinUrl: linkedinUrl.trim(),
+      source,
+      candidateStatus,
+      role: currentDesignation.trim() || selectedJob?.title || "Candidate",
+      department: selectedJob?.department || "Engineering",
       stage: "Applied",
-      sourceTag: "Manual PDF Upload",
-      skills,
-      expectedSalary,
+      sourceTag: source,
+      skills: parsedSkills,
+      expectedSalary: 0,
       proposedSalary: 0,
       proposedEquity: 0,
-      jobId: selectedJobId || undefined,
+      jobId: selectedJobId,
       scorecard: {
         technicalScore: 0,
         systemScore: 0,
@@ -122,202 +225,415 @@ export default function AddCandidateModal({
 
     const auditEntry: AuditEntry = {
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      user: "HRRecruiter_01",
-      action: "INGESTED_PROFILE",
-      target: name.trim(),
-      notes: `Simulated Google Drive file written. Parsed tags: ${skills.slice(0, 3).join(", ")}...`,
+      user: "Current User",
+      action: "CREATED_CANDIDATE",
+      target: fullName,
+      notes: `Added candidate to job "${selectedJob?.title ?? selectedJobId}" (Skills: ${parsedSkills.join(", ") || "None"})`,
     };
 
-    onSave(newCandidate, auditEntry);
-    onToast("Ingestion Complete", `${name} has been added to the pipeline.`, "check");
+    if (onSave) {
+      onSave(newCandidate, auditEntry);
+    }
+
+    onToast("Candidate Created", `${fullName} has been successfully added.`, "check");
     setSaving(false);
     onClose();
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-950/40 dark:bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden transition-colors duration-200">
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+      <div
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col overflow-hidden my-8 transition-colors duration-200"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-candidate-modal-title"
+      >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <i className="fa-solid fa-file-import text-indigo-600 dark:text-indigo-400" />
-            <h3 className="font-bold text-slate-800 dark:text-slate-200">Ingest New Candidate</h3>
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-sm">
+              <i className="fa-solid fa-user-plus text-base" />
+            </div>
+            <div>
+              <h3 id="add-candidate-modal-title" className="text-base font-bold text-slate-900 dark:text-slate-100">
+                Add New Candidate
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Register candidate details and assign to an active job opening.
+              </p>
+            </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title="Close (Esc)"
           >
-            <i className="fa-solid fa-xmark" />
+            <i className="fa-solid fa-xmark text-sm" />
           </button>
         </div>
 
-        {/* Body */}
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                Full Legal Name
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Sarah Connor"
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
-              />
+        {/* Form Body */}
+        <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(85vh-130px)]">
+          {/* SECTION 1: Associated Job & Status */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200/80 dark:border-slate-800/80 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+              <i className="fa-solid fa-briefcase text-indigo-500" />
+              <span>Position & Assignment</span>
             </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="sarah.c@skymail.com"
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                Job Designation Role
-              </label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
-              >
-                {ROLE_OPTIONS.map((r) => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                Expected Annual Comp
-              </label>
-              <input
-                type="number"
-                value={salary}
-                onChange={(e) => setSalary(e.target.value)}
-                placeholder="185000"
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-          </div>
-
-          {/* Job assignment */}
-          {jobs.length > 0 && (
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                Assign to Job Requisition
-              </label>
-              <select
-                value={selectedJobId}
-                onChange={(e) => setSelectedJobId(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
-              >
-                {jobs.filter((j) => j.status === "OPEN" || j.status === "DRAFT").map((j) => (
-                  <option key={j.id} value={j.id}>{j.title} ({j.department})</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Upload zone */}
-          <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-              Manual Resume File Ingest
-            </label>
-            {parserState === "idle" && (
-              <div
-                onClick={triggerParserSimulation}
-                className="border-2 border-dashed border-slate-300 dark:border-slate-800 hover:border-indigo-500 hover:bg-indigo-50/10 dark:hover:bg-indigo-950/10 rounded-xl p-6 text-center cursor-pointer transition-all"
-              >
-                <i className="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 dark:text-slate-500 mb-2 block" />
-                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Click to upload resume PDF
-                </p>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
-                  Simulates automatic parsing &amp; Google Drive streaming upload
-                </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Job Dropdown (Required, fetched via job endpoint) */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
+                  Associated Job <span className="text-red-500">*</span>
+                </label>
+                {loadingJobs ? (
+                  <div className="w-full h-10 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center px-3 gap-2 text-xs text-slate-400 animate-pulse">
+                    <i className="fa-solid fa-circle-notch fa-spin text-xs" />
+                    <span>Fetching open jobs from server...</span>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedJobId}
+                    onChange={(e) => setSelectedJobId(e.target.value)}
+                    required
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                  >
+                    <option value="" disabled>Select Job Position</option>
+                    {availableJobs.map((j) => (
+                      <option key={j.id} value={j.id}>
+                        {j.title} {j.department ? `(${j.department})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
-            )}
 
-            {parserState === "parsing" && (
-              <div className="border-2 border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-xl p-6 space-y-3">
-                <div className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-5 w-5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{parseStepText}</span>
-                </div>
-                <div className="w-full bg-slate-200 dark:bg-slate-950 rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className="bg-indigo-600 h-full transition-all duration-300"
-                    style={{ width: `${parseProgress}%` }}
+              {/* Candidate Status Dropdown */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
+                  Candidate Status
+                </label>
+                <select
+                  value={candidateStatus}
+                  onChange={(e) => setCandidateStatus(e.target.value)}
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                >
+                  {STATUS_OPTIONS.map((st) => (
+                    <option key={st} value={st}>
+                      {st}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 2: Personal Information */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+              <i className="fa-solid fa-id-card text-indigo-500" />
+              <span>Personal Information</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* First Name */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
+                  First Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="e.g. Rahul"
+                  required
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                />
+              </div>
+
+              {/* Last Name */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
+                  Last Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="e.g. Sharma"
+                  required
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                />
+              </div>
+
+              {/* Email Address */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
+                  Email Address <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs pointer-events-none">
+                    <i className="fa-solid fa-envelope" />
+                  </span>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="rahul.sharma@example.com"
+                    required
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   />
                 </div>
               </div>
-            )}
 
-            {parserState === "done" && (
-              <div className="border-2 border-dashed border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl p-4 flex items-center justify-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold text-xs">
-                <i className="fa-solid fa-circle-check" /><span> CV Document Scanned &amp; Mapped to Google Drive!</span>
+              {/* Phone Number */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
+                  Phone Number
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs pointer-events-none">
+                    <i className="fa-solid fa-phone" />
+                  </span>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+91 98765 43210"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  />
+                </div>
               </div>
-            )}
+
+              {/* Current Location */}
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
+                  Current Location
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs pointer-events-none">
+                    <i className="fa-solid fa-location-dot" />
+                  </span>
+                  <input
+                    type="text"
+                    value={currentLocation}
+                    onChange={(e) => setCurrentLocation(e.target.value)}
+                    placeholder="e.g. Bengaluru, Karnataka, India"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Discovered tags */}
-          <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-              Discovered Resume Skills Tags
-            </label>
-            <div className="flex flex-wrap gap-1.5 p-3 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg min-h-[42px]">
-              {discoveredSkills.length === 0 ? (
-                <span className="text-xs text-slate-400 italic">No resume analyzed yet...</span>
-              ) : (
-                discoveredSkills.map((s) => (
-                  <span
-                    key={s}
-                    className="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-indigo-600 dark:text-indigo-400 font-semibold px-2 py-1 rounded text-[11px]"
-                  >
-                    {s}
-                  </span>
-                ))
-              )}
+          {/* SECTION 3: Professional Experience & Profile */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+              <i className="fa-solid fa-user-tie text-indigo-500" />
+              <span>Professional Details</span>
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Total Experience */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
+                  Total Exp (Years)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={totalExperience}
+                  onChange={(e) => setTotalExperience(e.target.value)}
+                  placeholder="e.g. 5.5"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                />
+              </div>
+
+              {/* Current Company */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
+                  Current Company
+                </label>
+                <input
+                  type="text"
+                  value={currentCompany}
+                  onChange={(e) => setCurrentCompany(e.target.value)}
+                  placeholder="e.g. TechCorp"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                />
+              </div>
+
+              {/* Current Designation */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
+                  Current Designation
+                </label>
+                <input
+                  type="text"
+                  value={currentDesignation}
+                  onChange={(e) => setCurrentDesignation(e.target.value)}
+                  placeholder="e.g. Senior Engineer"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Candidate Source */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
+                  Candidate Source
+                </label>
+                <select
+                  value={source}
+                  onChange={(e) => setSource(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                >
+                  {SOURCE_OPTIONS.map((src) => (
+                    <option key={src} value={src}>
+                      {src}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* LinkedIn Profile URL */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
+                  LinkedIn Profile URL
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs pointer-events-none">
+                    <i className="fa-brands fa-linkedin text-indigo-500" />
+                  </span>
+                  <input
+                    type="url"
+                    value={linkedinUrl}
+                    onChange={(e) => setLinkedinUrl(e.target.value)}
+                    placeholder="https://linkedin.com/in/username"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Candidate Skills (textarea with info span tag) */}
+              <div className="sm:col-span-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                    Candidate Skills
+                  </label>
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500 font-normal">
+                    enter candidate skills by , seperated
+                  </span>
+                </div>
+                <textarea
+                  rows={3}
+                  value={skillsText}
+                  onChange={(e) => setSkillsText(e.target.value)}
+                  placeholder="e.g. React, TypeScript, Next.js, PostgreSQL, Node.js"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 4: Resume Document (File Upload) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                <i className="fa-solid fa-file-pdf text-red-500" />
+                <span>Resume Document</span>
+              </label>
+              <span className="text-[11px] text-slate-400 dark:text-slate-500">PDF, DOC, DOCX (Max 10MB)</span>
+            </div>
+
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+
+            {!resumeFile ? (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600 rounded-xl p-5 text-center cursor-pointer transition-all bg-slate-50/50 dark:bg-slate-950/30 group"
+              >
+                <div className="w-10 h-10 mx-auto rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                  <i className="fa-solid fa-cloud-arrow-up text-sm" />
+                </div>
+                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Click to browse or drag and drop resume
+                </p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                  Supports standard CV formats
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40">
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-file-lines text-sm" />
+                  </div>
+                  <div className="truncate">
+                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                      {resumeFile.name}
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      {(resumeFile.size / 1024).toFixed(1)} KB
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/40">
+                    Ready
+                  </span>
+                  <button
+                    type="button"
+                    onClick={removeFile}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                    title="Remove file"
+                  >
+                    <i className="fa-solid fa-trash text-xs" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3 bg-slate-50 dark:bg-slate-950">
+        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3 bg-slate-50/50 dark:bg-slate-900/50">
           <button
+            type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all"
+            disabled={saving}
+            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
           <button
-            disabled={parserState !== "done" || saving}
+            type="button"
             onClick={handleSave}
-            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 ${
-              parserState === "done" && !saving
-                ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 cursor-pointer"
-                : "bg-indigo-600/30 dark:bg-indigo-600/50 text-slate-400 cursor-not-allowed"
-            }`}
+            disabled={saving}
+            className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm shadow-indigo-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 flex items-center gap-2"
           >
-            {saving && (
-              <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
+            {saving ? (
+              <>
+                <i className="fa-solid fa-circle-notch fa-spin text-xs" />
+                <span>Creating Candidate...</span>
+              </>
+            ) : (
+              <>
+                <i className="fa-solid fa-check text-xs" />
+                <span>Add Candidate</span>
+              </>
             )}
-            Ingest Candidate
           </button>
         </div>
       </div>
