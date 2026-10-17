@@ -79,9 +79,6 @@ export async function createJobSimpleAction(input: {
     if (input.departmentId) {
       body.departmentId = input.departmentId;
     }
-    if (input.ownerId) {
-      body.ownerId = input.ownerId;
-    }
     if (input.budgetLimit != null) {
       body.budgetLimit = input.budgetLimit;
     }
@@ -119,9 +116,6 @@ export async function createJobSimpleAction(input: {
     const patchBody: Record<string, unknown> = {};
     if (createdJob.status !== backendStatus) {
       patchBody.status = backendStatus;
-    }
-    if (input.ownerId && createdJob.ownerId !== input.ownerId) {
-      patchBody.ownerId = input.ownerId;
     }
 
     if (Object.keys(patchBody).length > 0) {
@@ -206,9 +200,6 @@ export async function createJobAction(input: CreateJobInput): Promise<{ job: Job
       description: input.description || `Job posting for ${input.title} in ${input.department}.`,
       departmentId: input.departmentId || dept?.id || undefined,
     };
-    if (input.hiringManagerId) {
-      jobBody.ownerId = input.hiringManagerId;
-    }
     if (input.budgetLimit != null) {
       jobBody.budgetLimit = input.budgetLimit;
     }
@@ -246,9 +237,6 @@ export async function createJobAction(input: CreateJobInput): Promise<{ job: Job
     const patchBody: Record<string, unknown> = {};
     if (createdJob.status !== targetStatus) {
       patchBody.status = targetStatus;
-    }
-    if (input.hiringManagerId && createdJob.ownerId !== input.hiringManagerId) {
-      patchBody.ownerId = input.hiringManagerId;
     }
     if (Object.keys(patchBody).length > 0) {
       const updateJobRes = await fetch(`${API_BASE_URL}/api/v1/jobs/${createdJob.id}`, {
