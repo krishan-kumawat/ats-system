@@ -6,13 +6,15 @@ export const metadata: Metadata = {
   description: "Multi-Persona Internal Applicant Tracking System",
 };
 
+import { PermissionsProvider } from "@/context/PermissionsContext";
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="h-full">
+    <html lang="en" className="h-full" suppressHydrationWarning>
       <head>
         <link
           href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
@@ -26,8 +28,11 @@ export default function RootLayout({
       <body
         className="h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100"
         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+        suppressHydrationWarning
       >
-        {children}
+        <PermissionsProvider>
+          {children}
+        </PermissionsProvider>
       </body>
     </html>
   );

@@ -1,30 +1,28 @@
 "use client";
 
-import { useState, useEffect, useTransition, useRef } from "react";
+import { useState, useEffect, useTransition, useRef, useCallback } from "react";
 import {
   fetchUsersAction,
   createUserAction,
   updateUserAction,
   toggleUserActiveAction,
-  UserRow,
+  type UserRow,
 } from "@/app/actions/users";
 import { UserRole } from "@/lib/enums";
 import { ROLE_META } from "@/lib/permissions";
 
 const ALL_ROLES: UserRole[] = [
-  UserRole.RECRUITER,
   UserRole.ADMIN,
+  UserRole.RECRUITER,
   UserRole.HIRING_MANAGER,
-  UserRole.HEAD_OF_HR,
-  UserRole.FOUNDER,
+  UserRole.READ_ONLY,
 ];
 
 const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
-  [UserRole.FOUNDER]:        "Full access — all permissions, immutable",
-  [UserRole.HEAD_OF_HR]:     "Assign jobs, full pipeline access",
-  [UserRole.ADMIN]:          "Broad access, no offer approval",
+  [UserRole.ADMIN]:          "Full access — all permissions, immutable",
   [UserRole.RECRUITER]:      "Pipeline, jobs, candidate ingest",
   [UserRole.HIRING_MANAGER]: "Scorecards and analytics only",
+  [UserRole.READ_ONLY]:      "Read-only access to recruitment data",
 };
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -128,26 +126,155 @@ function RoleCombobox({
   );
 }
 
+const ALL_PROFILES = ["Admin", "Recruiter", "Hiring Manager", "Read Only"];
+const ALL_ROLE_NAMES = ["CEO", "HR Head", "Recruitment Manager", "Recruiter"];
+const ALL_DEPARTMENTS = ["Engineering", "HR"];
+
+const PROFILE_ICONS: Record<string, string> = {
+  "Admin": "fa-chess-king",
+  "Recruiter": "fa-id-badge",
+  "Hiring Manager": "fa-user-tie",
+  "Read Only": "fa-eye",
+};
+
+const PROFILE_COLORS: Record<string, string> = {
+  "Admin": "text-indigo-750 dark:text-indigo-350 bg-indigo-100 dark:bg-indigo-950",
+  "Recruiter": "text-emerald-750 dark:text-emerald-350 bg-emerald-100 dark:bg-emerald-950",
+  "Hiring Manager": "text-violet-750 dark:text-violet-350 bg-violet-100 dark:bg-violet-950",
+  "Read Only": "text-slate-750 dark:text-slate-350 bg-slate-100 dark:bg-slate-950",
+};
+
+function ProfileNameCombobox({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-3 pr-10 py-2.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all appearance-none cursor-pointer font-semibold"
+      >
+        {ALL_PROFILES.map((p) => (
+          <option key={p} value={p}>
+            {p}
+          </option>
+        ))}
+      </select>
+      <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">
+        <i className="fa-solid fa-chevron-down" />
+      </div>
+    </div>
+  );
+}
+
+function RoleNameCombobox({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-3 pr-10 py-2.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all appearance-none cursor-pointer font-semibold"
+      >
+        {ALL_ROLE_NAMES.map((r) => (
+          <option key={r} value={r}>
+            {r}
+          </option>
+        ))}
+      </select>
+      <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">
+        <i className="fa-solid fa-chevron-down" />
+      </div>
+    </div>
+  );
+}
+
+function DepartmentNameCombobox({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-3 pr-10 py-2.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all appearance-none cursor-pointer font-semibold"
+      >
+        <option value="">None</option>
+        {ALL_DEPARTMENTS.map((d) => (
+          <option key={d} value={d}>
+            {d}
+          </option>
+        ))}
+      </select>
+      <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">
+        <i className="fa-solid fa-chevron-down" />
+      </div>
+    </div>
+  );
+}
+
+
 // ─── Shared form fields used in both Create and Edit modals ──────────────────
 
 interface UserFormFields {
   name: string;
   email: string;
   password: string;
-  role: UserRole;
+  profileName: string;
+  roleName: string;
+  departmentName: string;
   showPw: boolean;
   saving: boolean;
   isEdit?: boolean;
   onNameChange: (v: string) => void;
   onEmailChange: (v: string) => void;
   onPasswordChange: (v: string) => void;
-  onRoleChange: (v: UserRole) => void;
+  onProfileNameChange: (v: string) => void;
+  onRoleNameChange: (v: string) => void;
+  onDepartmentNameChange: (v: string) => void;
   onTogglePw: () => void;
 }
 
-function UserFormBody({ name, email, password, role, showPw, saving, isEdit, onNameChange, onEmailChange, onPasswordChange, onRoleChange, onTogglePw }: UserFormFields) {
-  const meta    = ROLE_META[role];
-  const isValid = name.trim() && email.trim() && (!isEdit ? password.length >= 6 : !password || password.length >= 6);
+function UserFormBody({
+  name,
+  email,
+  password,
+  profileName,
+  roleName,
+  departmentName,
+  showPw,
+  saving,
+  isEdit,
+  onNameChange,
+  onEmailChange,
+  onPasswordChange,
+  onProfileNameChange,
+  onRoleNameChange,
+  onDepartmentNameChange,
+  onTogglePw,
+}: UserFormFields) {
+  const isValid = (name || "").trim() && (email || "").trim() && (!isEdit ? (password || "").length >= 6 : !password || (password || "").length >= 6);
+
+  // Map profileName string to UserRole to look up style assets
+  let mappedRole = UserRole.RECRUITER;
+  if (profileName === "Admin") mappedRole = UserRole.ADMIN;
+  else if (profileName === "Hiring Manager") mappedRole = UserRole.HIRING_MANAGER;
+  else if (profileName === "Read Only") mappedRole = UserRole.READ_ONLY;
+
+  const meta = ROLE_META[mappedRole];
 
   return (
     <div className="px-6 py-5 space-y-4 overflow-y-auto max-h-[70vh]">
@@ -166,6 +293,7 @@ function UserFormBody({ name, email, password, role, showPw, saving, isEdit, onN
           <div className="relative">
             <i className="fa-solid fa-envelope absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600 text-xs pointer-events-none" />
             <input type="email" value={email} onChange={(e) => onEmailChange(e.target.value)} placeholder="priya@org.com"
+              name="new-user-email-field" autoComplete="new-password"
               className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-8 pr-3 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" />
           </div>
         </div>
@@ -180,6 +308,7 @@ function UserFormBody({ name, email, password, role, showPw, saving, isEdit, onN
           <i className="fa-solid fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600 text-xs pointer-events-none" />
           <input type={showPw ? "text" : "password"} value={password} onChange={(e) => onPasswordChange(e.target.value)}
             placeholder={isEdit ? "New password (optional)" : "Min. 6 characters"}
+            name="new-user-password-field" autoComplete="new-password"
             className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-8 pr-10 py-2.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" />
           <button type="button" onClick={onTogglePw} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
             <i className={`fa-solid ${showPw ? "fa-eye-slash" : "fa-eye"} text-xs`} />
@@ -190,10 +319,21 @@ function UserFormBody({ name, email, password, role, showPw, saving, isEdit, onN
         )}
       </div>
 
-      {/* Role */}
+      {/* Combobox selections */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Profile Name <span className="text-red-400">*</span></label>
+          <ProfileNameCombobox value={profileName} onChange={onProfileNameChange} />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Role Name <span className="text-red-400">*</span></label>
+          <RoleNameCombobox value={roleName} onChange={onRoleNameChange} />
+        </div>
+      </div>
+
       <div>
-        <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Role <span className="text-red-400">*</span></label>
-        <RoleCombobox value={role} onChange={onRoleChange} />
+        <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Department</label>
+        <DepartmentNameCombobox value={departmentName} onChange={onDepartmentNameChange} />
       </div>
 
       {/* Preview */}
@@ -223,27 +363,36 @@ function CreateUserModal({ onClose, onCreated, onToast }: {
   onCreated: (user: UserRow) => void;
   onToast: (t: string, m: string, i?: string) => void;
 }) {
-  const [name, setName]       = useState("");
-  const [email, setEmail]     = useState("");
-  const [password, setPw]     = useState("");
-  const [role, setRole]       = useState<UserRole>(UserRole.RECRUITER);
-  const [showPw, setShowPw]   = useState(false);
-  const [saving, setSaving]   = useState(false);
+  const [name, setName]           = useState("");
+  const [email, setEmail]         = useState("");
+  const [password, setPw]         = useState("");
+  const [profileName, setProfile] = useState("Recruiter");
+  const [roleName, setRoleName]   = useState("Recruiter");
+  const [deptName, setDeptName]   = useState("");
+  const [showPw, setShowPw]       = useState(false);
+  const [saving, setSaving]       = useState(false);
 
-  const isValid = name.trim() && email.trim() && password.length >= 6;
+  const isValid = name.trim() && email.trim() && password.length >= 6 && profileName && roleName;
 
   async function handleSave() {
     setSaving(true);
-    const result = await createUserAction({ name, email, password, role });
+    const result = await createUserAction({
+      name,
+      email,
+      password,
+      profileName,
+      roleName,
+      departmentName: deptName || undefined,
+    });
     if (result.error) { onToast("Error", result.error, "ban"); setSaving(false); return; }
     onCreated(result.user!);
-    onToast("User Created", `${name} added as ${ROLE_META[role].label}.`, "user-plus");
+    onToast("User Created", `${name} added successfully.`, "user-plus");
     onClose();
   }
 
   return (
     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md shadow-2xl flex flex-col">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col">
         {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between rounded-t-2xl">
           <div className="flex items-center gap-3">
@@ -252,7 +401,7 @@ function CreateUserModal({ onClose, onCreated, onToast }: {
             </div>
             <div>
               <h3 className="font-bold text-slate-800 dark:text-slate-200">Create New User</h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">Founder access only</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Admin access only</p>
             </div>
           </div>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
@@ -260,8 +409,24 @@ function CreateUserModal({ onClose, onCreated, onToast }: {
           </button>
         </div>
 
-        <UserFormBody name={name} email={email} password={password} role={role} showPw={showPw} saving={saving} isEdit={false}
-          onNameChange={setName} onEmailChange={setEmail} onPasswordChange={setPw} onRoleChange={setRole} onTogglePw={() => setShowPw((v) => !v)} />
+        <UserFormBody
+          name={name}
+          email={email}
+          password={password}
+          profileName={profileName}
+          roleName={roleName}
+          departmentName={deptName}
+          showPw={showPw}
+          saving={saving}
+          isEdit={false}
+          onNameChange={setName}
+          onEmailChange={setEmail}
+          onPasswordChange={setPw}
+          onProfileNameChange={setProfile}
+          onRoleNameChange={setRoleName}
+          onDepartmentNameChange={setDeptName}
+          onTogglePw={() => setShowPw((v) => !v)}
+        />
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-950 rounded-b-2xl">
@@ -287,18 +452,39 @@ function EditUserModal({ user, onClose, onUpdated, onToast }: {
   onUpdated: (user: UserRow) => void;
   onToast: (t: string, m: string, i?: string) => void;
 }) {
-  const [name, setName]     = useState(user.name);
-  const [email, setEmail]   = useState(user.email);
+  const [name, setName]     = useState(user.name || "");
+  const [email, setEmail]   = useState(user.email || "");
   const [password, setPw]   = useState("");
-  const [role, setRole]     = useState<UserRole>(user.role);
-  const [showPw, setShowPw] = useState(false);
-  const [saving, setSaving] = useState(false);
 
-  const isValid = name.trim() && email.trim() && (!password || password.length >= 6);
+  const initialProfile = user.role === UserRole.ADMIN ? "Admin"
+    : user.role === UserRole.RECRUITER ? "Recruiter"
+    : user.role === UserRole.HIRING_MANAGER ? "Hiring Manager"
+    : "Read Only";
+
+  const initialRole = user.role === UserRole.ADMIN ? "CEO"
+    : user.role === UserRole.RECRUITER ? "Recruiter"
+    : user.role === UserRole.HIRING_MANAGER ? "Recruitment Manager"
+    : "Recruiter";
+
+  const [profileName, setProfile] = useState(initialProfile);
+  const [roleName, setRoleName]   = useState(initialRole);
+  const [deptName, setDeptName]   = useState("");
+  const [showPw, setShowPw]       = useState(false);
+  const [saving, setSaving]       = useState(false);
+
+  const isValid = (name || "").trim() && (email || "").trim() && (!password || (password || "").length >= 6);
 
   async function handleSave() {
     setSaving(true);
-    const result = await updateUserAction({ id: user.id, name, email, role, password: password || undefined });
+    const result = await updateUserAction({
+      id: user.id,
+      name,
+      email,
+      password: password || undefined,
+      profileName,
+      roleName,
+      departmentName: deptName || undefined,
+    });
     if (result.error) { onToast("Error", result.error, "ban"); setSaving(false); return; }
     onUpdated(result.user!);
     onToast("User Updated", `${name}'s details have been saved.`, "user-pen");
@@ -307,7 +493,7 @@ function EditUserModal({ user, onClose, onUpdated, onToast }: {
 
   return (
     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md shadow-2xl flex flex-col">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col">
         {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between rounded-t-2xl">
           <div className="flex items-center gap-3">
@@ -324,8 +510,24 @@ function EditUserModal({ user, onClose, onUpdated, onToast }: {
           </button>
         </div>
 
-        <UserFormBody name={name} email={email} password={password} role={role} showPw={showPw} saving={saving} isEdit={true}
-          onNameChange={setName} onEmailChange={setEmail} onPasswordChange={setPw} onRoleChange={setRole} onTogglePw={() => setShowPw((v) => !v)} />
+        <UserFormBody
+          name={name}
+          email={email}
+          password={password}
+          profileName={profileName}
+          roleName={roleName}
+          departmentName={deptName}
+          showPw={showPw}
+          saving={saving}
+          isEdit={true}
+          onNameChange={setName}
+          onEmailChange={setEmail}
+          onPasswordChange={setPw}
+          onProfileNameChange={setProfile}
+          onRoleNameChange={setRoleName}
+          onDepartmentNameChange={setDeptName}
+          onTogglePw={() => setShowPw((v) => !v)}
+        />
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-950 rounded-b-2xl">
@@ -345,58 +547,98 @@ function EditUserModal({ user, onClose, onUpdated, onToast }: {
 
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
-export default function UsersPanel({ onToast }: { onToast: (t: string, m: string, i?: string) => void }) {
+// ─── Main Panel ───────────────────────────────────────────────────────────────
+
+interface UsersPanelProps {
+  onToast: (t: string, m: string, i?: string) => void;
+  onNavigateToRolePermissions?: (role: UserRole) => void;
+  onSelectUserId?: (userId: string) => void;
+}
+
+export default function UsersPanel({ onToast, onNavigateToRolePermissions, onSelectUserId }: UsersPanelProps) {
   const [users, setUsers]             = useState<UserRow[]>([]);
   const [search, setSearch]           = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [roleFilter, setRoleFilter]   = useState<UserRole | "all">("all");
   const [showCreate, setShowCreate]   = useState(false);
   const [editTarget, setEditTarget]   = useState<UserRow | null>(null);
   const [isPending, startTransition]  = useTransition();
   const [toggling, setToggling]       = useState<Set<string>>(new Set());
 
+  // Pagination State
+  const [page, setPage]               = useState(1);
+  const [limit]                       = useState(10);
+  const [total, setTotal]             = useState(0);
+  const [roleCounts, setRoleCounts]   = useState<Record<UserRole, number>>({
+    [UserRole.ADMIN]: 0,
+    [UserRole.RECRUITER]: 0,
+    [UserRole.HIRING_MANAGER]: 0,
+    [UserRole.READ_ONLY]: 0,
+  });
+
+  // Debounce search value
   useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1); // reset to page 1 on new search query
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [search]);
+
+  const fetchData = useCallback(() => {
     startTransition(async () => {
-      const data = await fetchUsersAction();
-      setUsers(data);
+      const data = await fetchUsersAction(page, limit, debouncedSearch, roleFilter);
+      if (data.unauthorized) {
+        window.location.href = "/login";
+        return;
+      }
+      setUsers(data.users);
+      setTotal(data.total);
+      if (data.roleCounts) {
+        setRoleCounts(data.roleCounts);
+      }
     });
-  }, []);
+  }, [page, limit, debouncedSearch, roleFilter]);
 
-  // Keep active-first sort after any local mutation
-  function sortUsers(list: UserRow[]): UserRow[] {
-    return [...list].sort((a, b) => {
-      if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
-      return 0;
-    });
-  }
-
-  const filtered = sortUsers(
-    users.filter((u) => {
-      const matchSearch = !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
-      const matchRole   = roleFilter === "all" || u.role === roleFilter;
-      return matchSearch && matchRole;
-    })
-  );
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   async function handleToggle(u: UserRow) {
     const next = !u.isActive;
     setToggling((prev) => new Set(prev).add(u.id));
-    setUsers((prev) => sortUsers(prev.map((x) => x.id === u.id ? { ...x, isActive: next } : x)));
+    setUsers((prev) => prev.map((x) => x.id === u.id ? { ...x, isActive: next } : x));
     const result = await toggleUserActiveAction(u.id, next);
     if (result.error) {
-      setUsers((prev) => sortUsers(prev.map((x) => x.id === u.id ? { ...x, isActive: u.isActive } : x)));
+      setUsers((prev) => prev.map((x) => x.id === u.id ? { ...x, isActive: u.isActive } : x));
       onToast("Error", result.error, "ban");
     } else {
       onToast(next ? "User Activated" : "User Deactivated", `${u.name} is now ${next ? "active" : "deactivated"}.`, next ? "circle-check" : "circle-xmark");
+      fetchData();
     }
     setToggling((prev) => { const s = new Set(prev); s.delete(u.id); return s; });
   }
 
-  function handleCreated(user: UserRow) { setUsers((prev) => sortUsers([user, ...prev])); }
-  function handleUpdated(user: UserRow) { setUsers((prev) => sortUsers(prev.map((x) => x.id === user.id ? user : x))); }
+  function handleCreated(_user: UserRow) {
+    setPage(1);
+    fetchData();
+  }
 
-  const activeCount   = users.filter((u) => u.isActive).length;
-  const inactiveCount = users.filter((u) => !u.isActive).length;
-  const roleCounts    = ALL_ROLES.reduce<Record<string, number>>((acc, r) => { acc[r] = users.filter((u) => u.role === r).length; return acc; }, {});
+  function handleUpdated(_user: UserRow) {
+    fetchData();
+  }
+
+  const totalPages = Math.ceil(total / limit);
+  const pageNumbers = [];
+  const maxButtons = 5;
+  let startPage = Math.max(1, page - Math.floor(maxButtons / 2));
+  let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+  if (endPage - startPage + 1 < maxButtons) {
+    startPage = Math.max(1, endPage - maxButtons + 1);
+  }
+  for (let i = startPage; i <= endPage; i++) {
+    pageNumbers.push(i);
+  }
 
   return (
     <>
@@ -411,9 +653,8 @@ export default function UsersPanel({ onToast }: { onToast: (t: string, m: string
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               {isPending ? "Loading…" : <>
-                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{activeCount} active</span>
-                {inactiveCount > 0 && <span className="text-red-500 dark:text-red-400 font-semibold"> · {inactiveCount} deactivated</span>}
-                <span className="text-slate-400"> · {users.length} total</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{total} active</span>
+                <span className="text-slate-400"> · {total} total</span>
               </>}
             </p>
           </div>
@@ -429,7 +670,10 @@ export default function UsersPanel({ onToast }: { onToast: (t: string, m: string
             const meta = ROLE_META[r];
             const sel  = roleFilter === r;
             return (
-              <button key={r} onClick={() => setRoleFilter((p) => p === r ? "all" : r)}
+              <button key={r} onClick={() => {
+                setRoleFilter((p) => p === r ? "all" : r);
+                setPage(1);
+              }}
                 className={`p-3.5 rounded-xl border text-left transition-all ${sel ? "border-indigo-400 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/40 shadow-sm" : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700"}`}>
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2 ${meta.bg}`}>
                   <i className={`fa-solid ${meta.icon} text-xs ${meta.color}`} />
@@ -446,25 +690,28 @@ export default function UsersPanel({ onToast }: { onToast: (t: string, m: string
           <div className="relative flex-1 min-w-[220px]">
             <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
             <input type="text" placeholder="Search by name or email…" value={search} onChange={(e) => setSearch(e.target.value)}
+              name="user-table-search-field" autoComplete="new-password"
               className="w-full pl-8 pr-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           </div>
-          {roleFilter !== "all" && (
-            <button onClick={() => setRoleFilter("all")}
+          {(roleFilter !== "all" || search) && (
+            <button onClick={() => { setRoleFilter("all"); setSearch(""); setPage(1); }}
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl transition-all bg-white dark:bg-slate-900">
               <i className="fa-solid fa-xmark text-[10px]" />Clear filter
             </button>
           )}
-          <p className="text-xs text-slate-400 ml-auto hidden sm:block">{filtered.length} of {users.length} users</p>
+          <p className="text-xs text-slate-400 ml-auto hidden sm:block">
+            Showing {total === 0 ? 0 : (page - 1) * limit + 1} - {Math.min(page * limit, total)} of {total} users
+          </p>
         </div>
 
         {/* Table */}
-        <div className="flex-1 overflow-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div className="flex-1 overflow-auto rounded-t-2xl border-x border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
           {isPending ? (
             <div className="flex items-center justify-center h-40 gap-3 text-slate-400 dark:text-slate-500">
               <i className="fa-solid fa-circle-notch fa-spin text-xl text-indigo-500" />
               <span className="text-sm">Loading users…</span>
             </div>
-          ) : filtered.length === 0 ? (
+          ) : users.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 gap-2 text-slate-400 dark:text-slate-500">
               <i className="fa-solid fa-user-slash text-3xl" />
               <p className="text-sm font-medium">No users match the current filter</p>
@@ -475,6 +722,7 @@ export default function UsersPanel({ onToast }: { onToast: (t: string, m: string
                 <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
                   <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">User</th>
                   <th className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Role</th>
+                  <th className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Profile Name</th>
                   <th className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 hidden md:table-cell">Email</th>
                   <th className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 hidden lg:table-cell">Joined</th>
                   <th className="text-center px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Active</th>
@@ -482,7 +730,7 @@ export default function UsersPanel({ onToast }: { onToast: (t: string, m: string
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filtered.map((u) => {
+                {users.map((u) => {
                   const meta       = ROLE_META[u.role];
                   const isToggling = toggling.has(u.id);
                   return (
@@ -490,23 +738,38 @@ export default function UsersPanel({ onToast }: { onToast: (t: string, m: string
 
                       {/* User */}
                       <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => onSelectUserId?.(u.id)}
+                          className="flex items-center gap-3 text-left hover:underline group"
+                        >
                           <div className={`relative w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${meta.bg}`}>
                             <span className={`text-xs font-bold ${meta.color}`}>{u.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}</span>
                             <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 ${u.isActive ? "bg-emerald-500" : "bg-slate-400"}`} />
                           </div>
                           <div className="min-w-0">
-                            <p className="font-semibold text-slate-800 dark:text-slate-200 truncate">{u.name}</p>
+                            <p className="font-semibold text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">{u.name}</p>
                             <p className="text-[10px] text-slate-400 truncate md:hidden">{u.email}</p>
                           </div>
-                        </div>
+                        </button>
                       </td>
 
                       {/* Role */}
                       <td className="px-4 py-3.5">
-                        <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg ${meta.bg} ${meta.color}`}>
-                          <i className={`fa-solid ${meta.icon} text-[9px]`} />{meta.label}
+                        <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300`}>
+                          {u.role === UserRole.ADMIN ? "CEO" : u.role === UserRole.RECRUITER ? "Recruiter" : u.role === UserRole.HIRING_MANAGER ? "Recruitment Manager" : "Recruiter"}
                         </span>
+                      </td>
+
+                      {/* Profile Name (Clickable Link) */}
+                      <td className="px-4 py-3.5">
+                        <button
+                          onClick={() => onNavigateToRolePermissions?.(u.role)}
+                          className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1.5 rounded-lg text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline transition-all"
+                        >
+                          <i className={`fa-solid ${meta.icon} text-[10px]`} />
+                          <span>{meta.label}</span>
+                        </button>
                       </td>
 
                       {/* Email */}
@@ -550,6 +813,61 @@ export default function UsersPanel({ onToast }: { onToast: (t: string, m: string
             </table>
           )}
         </div>
+
+        {/* Pagination controls */}
+        {total > 0 && (
+          <div className="flex items-center justify-between px-6 py-4 bg-white dark:bg-slate-900 border-x border-b border-slate-200 dark:border-slate-800 rounded-b-2xl flex-shrink-0">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Showing{" "}
+              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                {(page - 1) * limit + 1}
+              </span>{" "}
+              to{" "}
+              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                {Math.min(page * limit, total)}
+              </span>{" "}
+              of{" "}
+              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                {total}
+              </span>{" "}
+              users
+            </p>
+            <div className="flex items-center gap-1.5">
+              <button
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 disabled:opacity-40 disabled:hover:bg-transparent transition-all flex items-center gap-1"
+              >
+                <i className="fa-solid fa-chevron-left text-[10px]" />
+                Prev
+              </button>
+              {pageNumbers.map((pNum) => {
+                const active = pNum === page;
+                return (
+                  <button
+                    key={pNum}
+                    onClick={() => setPage(pNum)}
+                    className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
+                      active
+                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                        : "border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    }`}
+                  >
+                    {pNum}
+                  </button>
+                );
+              })}
+              <button
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 disabled:opacity-40 disabled:hover:bg-transparent transition-all flex items-center gap-1"
+              >
+                Next
+                <i className="fa-solid fa-chevron-right text-[10px]" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {showCreate && <CreateUserModal onClose={() => setShowCreate(false)} onCreated={handleCreated} onToast={onToast} />}

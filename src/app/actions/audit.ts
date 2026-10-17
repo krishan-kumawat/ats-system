@@ -1,65 +1,61 @@
 "use server";
 
-import { withDb } from "@/db/data-source";
-import { IAuditLog } from "@/db/schemas";
+
 import { getSession } from "@/lib/auth";
 import { AuditEntry } from "@/lib/atsStore";
+import { API_BASE_URL } from "@/lib/api";
+
 
 export interface WriteAuditInput {
   action: string;
-  targetTable: string;
+  resource: string;
   targetId: string;
   notes?: string;
   oldValues?: Record<string, unknown> | null;
   newValues?: Record<string, unknown> | null;
 }
 
-export async function writeAuditAction(input: WriteAuditInput): Promise<void> {
-  const session = await getSession();
-  if (!session || !process.env.DATABASE_URL) return;
 
-  try {
-    await withDb(async (ds) => {
-      const auditRepo = ds.getRepository<IAuditLog>("AuditLog");
-      await auditRepo.save(
-        auditRepo.create({
-          userId: session.id,
-          action: input.action,
-          targetTable: input.targetTable,
-          targetId: input.targetId,
-          notes: input.notes ?? null,
-          oldValues: input.oldValues ?? null,
-          newValues: input.newValues ?? null,
-        })
-      );
-    });
-  } catch (err) {
-    console.error("[writeAuditAction]", err);
-  }
+export async function writeAuditAction(input: WriteAuditInput): Promise<void> {
+  // Client-side direct logging is no-op as all auditing actions are done
+  // automatically by backend services when processing resource requests.
+  return;
 }
 
+
 export async function fetchAuditLogsAction(): Promise<AuditEntry[]> {
-  if (!process.env.DATABASE_URL) return [];
+  const session = await getSession();
+  if (!session || !session.accessToken) return [];
+
 
   try {
-    const logs = await withDb((ds) =>
-      ds.getRepository<IAuditLog>("AuditLog").find({
-        order: { timestamp: "ASC" },
-        take: 200,
-      })
-    );
+    const response = await fetch(`${API_BASE_URL}/api/v1/audit-logs`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+    });
 
-    return logs.map((l) => ({
-      timestamp: l.timestamp instanceof Date
-        ? l.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-        : String(l.timestamp),
-      user: l.userId,
+
+    if (!response.ok) return [];
+
+
+    const backendAuditLogs = await response.json();
+
+
+    return backendAuditLogs.map((l: any) => ({
+      timestamp: l.createdAt
+        ? new Date(l.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : "",
+      user: l.user ? `${l.user.firstName} ${l.user.lastName}` : "System",
       action: l.action,
-      target: l.targetId,
-      notes: l.notes ?? "",
+      target: l.resourceId ?? "",
+      notes: l.payload?.notes || l.action,
     }));
   } catch (err) {
     console.error("[fetchAuditLogsAction]", err);
     return [];
   }
 }
+
+
+

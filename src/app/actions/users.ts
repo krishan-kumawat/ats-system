@@ -1,11 +1,11 @@
 "use server";
 
+
 import { revalidatePath } from "next/cache";
-import { v4 as uuidv4 } from "uuid";
-import { withDb } from "@/db/data-source";
-import { IUser, IAuditLog } from "@/db/schemas";
 import { UserRole } from "@/lib/enums";
-import { getSession } from "@/lib/auth";
+import { getSession, destroySession } from "@/lib/auth";
+import { API_BASE_URL } from "@/lib/api";
+
 
 export interface UserRow {
   id: string;
@@ -16,132 +16,245 @@ export interface UserRow {
   createdAt: string;
 }
 
+
 export interface CreateUserInput {
   name: string;
   email: string;
   password: string;
-  role: UserRole;
+  profileName: string;
+  roleName: string;
+  departmentName?: string;
 }
+
 
 export interface UpdateUserInput {
   id: string;
   name: string;
   email: string;
-  role: UserRole;
+  profileName: string;
+  roleName: string;
+  departmentName?: string;
   password?: string; // only set if changing
 }
 
-// Ensure the isActive column exists (idempotent — safe to call every time)
-async function ensureIsActiveColumn(ds: import("typeorm").DataSource) {
-  await ds.query(`
-    ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS "isActive" BOOLEAN NOT NULL DEFAULT TRUE
-  `);
+
+function mapProfileToRole(profileName: string): UserRole {
+  const norm = (profileName || "").toLowerCase().replace(/[\s_-]+/g, "");
+  if (norm.includes("admin")) return UserRole.ADMIN;
+  if (norm.includes("recruiter")) return UserRole.RECRUITER;
+  if (norm.includes("hiring")) return UserRole.HIRING_MANAGER;
+  if (norm.includes("readonly") || norm.includes("read")) return UserRole.READ_ONLY;
+  return UserRole.READ_ONLY;
 }
+
 
 // ─── Fetch all users — active first, then inactive (Founder only) ─────────────
 
-export async function fetchUsersAction(): Promise<UserRow[]> {
+
+export interface FetchUsersResult {
+  users: UserRow[];
+  total: number;
+  page: number;
+  limit: number;
+  roleCounts: Record<UserRole, number>;
+  unauthorized?: boolean;
+}
+
+
+export async function fetchUsersAction(
+  page: number = 1,
+  limit: number = 10,
+  search: string = "",
+  roleFilter: string = "all"
+): Promise<FetchUsersResult> {
   const session = await getSession();
-  if (!session || session.role !== UserRole.FOUNDER) return [];
-  if (!process.env.DATABASE_URL) return [];
+  if (!session || !session.accessToken) {
+    return {
+      users: [],
+      total: 0,
+      page,
+      limit,
+      roleCounts: {
+        [UserRole.ADMIN]: 0,
+        [UserRole.RECRUITER]: 0,
+        [UserRole.HIRING_MANAGER]: 0,
+        [UserRole.READ_ONLY]: 0,
+      },
+      unauthorized: true,
+    };
+  }
+
 
   try {
-    const rows = await withDb(async (ds) => {
-      await ensureIsActiveColumn(ds);
-      return ds.query(
-        `SELECT id, name, email, role, "isActive", "createdAt"
-         FROM users
-         ORDER BY "isActive" DESC, "createdAt" DESC`
-      );
-    }) as Array<{
-      id: string;
-      name: string;
-      email: string;
-      role: UserRole;
-      isActive: boolean;
-      createdAt: Date | string;
-    }>;
+    let backendProfile = roleFilter;
+    if (roleFilter === UserRole.ADMIN) backendProfile = "Admin";
+    else if (roleFilter === UserRole.RECRUITER) backendProfile = "Recruiter";
+    else if (roleFilter === UserRole.HIRING_MANAGER) backendProfile = "Hiring Manager";
+    else if (roleFilter === UserRole.READ_ONLY) backendProfile = "Read Only";
 
-    return rows.map((u) => ({
-      id:       u.id,
-      name:     u.name,
-      email:    u.email,
-      role:     u.role,
-      isActive: u.isActive ?? true,
-      createdAt:
-        u.createdAt instanceof Date
-          ? u.createdAt.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-          : u.createdAt
-          ? new Date(u.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-          : "",
+
+    const url = `${API_BASE_URL}/api/v1/users?page=${page}&limit=${limit}&search=${encodeURIComponent(
+      search
+    )}&profile=${encodeURIComponent(backendProfile)}`;
+
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+    });
+
+
+    if (response.status === 401) {
+      await destroySession();
+      return {
+        users: [],
+        total: 0,
+        page,
+        limit,
+        roleCounts: {
+          [UserRole.ADMIN]: 0,
+          [UserRole.RECRUITER]: 0,
+          [UserRole.HIRING_MANAGER]: 0,
+          [UserRole.READ_ONLY]: 0,
+        },
+        unauthorized: true,
+      };
+    }
+
+
+    if (!response.ok) {
+      console.error("[fetchUsersAction] Backend API error:", response.statusText);
+      return {
+        users: [],
+        total: 0,
+        page,
+        limit,
+        roleCounts: {
+          [UserRole.ADMIN]: 0,
+          [UserRole.RECRUITER]: 0,
+          [UserRole.HIRING_MANAGER]: 0,
+          [UserRole.READ_ONLY]: 0,
+        },
+      };
+    }
+
+
+    const result = await response.json();
+    const users = result.data || [];
+    const total = result.total || 0;
+    const profileCounts = result.profileCounts || {};
+
+
+    const roleCounts: Record<UserRole, number> = {
+      [UserRole.ADMIN]: profileCounts["Admin"] || 0,
+      [UserRole.RECRUITER]: profileCounts["Recruiter"] || 0,
+      [UserRole.HIRING_MANAGER]: profileCounts["Hiring Manager"] || 0,
+      [UserRole.READ_ONLY]: profileCounts["Read Only"] || 0,
+    };
+
+
+    const mapped: UserRow[] = users.map((u: any) => ({
+      id: u.id,
+      name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
+      email: u.email,
+      role: mapProfileToRole(u.profile?.name),
+      isActive: !u.deletedAt,
+      createdAt: u.createdAt
+        ? new Date(u.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+        : "",
     }));
+
+
+    return {
+      users: mapped,
+      total,
+      page: result.page || page,
+      limit: result.limit || limit,
+      roleCounts,
+    };
   } catch (err) {
     console.error("[fetchUsersAction]", err);
-    return [];
+    return {
+      users: [],
+      total: 0,
+      page,
+      limit,
+      roleCounts: {
+        [UserRole.ADMIN]: 0,
+        [UserRole.RECRUITER]: 0,
+        [UserRole.HIRING_MANAGER]: 0,
+        [UserRole.READ_ONLY]: 0,
+      },
+    };
   }
 }
 
-// ─── Create user (Founder only) ───────────────────────────────────────────────
+
+// ─── Create user (Admin only) ─────────────────────────────────────────────────
+
 
 export async function createUserAction(
   input: CreateUserInput
-): Promise<{ user?: UserRow; error?: string }> {
+): Promise<{ user?: UserRow; error?: string; unauthorized?: boolean }> {
   const session = await getSession();
-  if (!session) return { error: "Not authenticated." };
-  if (session.role !== UserRole.FOUNDER) return { error: "Only Founders can create users." };
-  if (!process.env.DATABASE_URL) return { error: "Database not configured." };
+  if (!session || !session.accessToken) return { unauthorized: true };
+  if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can create users." };
 
-  if (!input.name.trim())  return { error: "Name is required." };
+
+  if (!input.name.trim()) return { error: "Name is required." };
   if (!input.email.trim()) return { error: "Email is required." };
   if (!input.password || input.password.length < 6)
     return { error: "Password must be at least 6 characters." };
 
+
   try {
-    const created = await withDb(async (ds) => {
-      await ensureIsActiveColumn(ds);
+    const nameParts = input.name.trim().split(/\s+/);
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ") || "User";
 
-      const userRepo  = ds.getRepository<IUser>("User");
-      const auditRepo = ds.getRepository<IAuditLog>("AuditLog");
 
-      const existing = await userRepo.findOne({ where: { email: input.email.trim().toLowerCase() } });
-      if (existing) throw new Error("A user with this email already exists.");
-
-      const newUser = await userRepo.save(
-        userRepo.create({
-          id:           uuidv4(),
-          name:         input.name.trim(),
-          email:        input.email.trim().toLowerCase(),
-          role:         input.role,
-          passwordHash: input.password,
-          isActive:     true,
-        })
-      );
-
-      await auditRepo.save(
-        auditRepo.create({
-          userId:      session.id,
-          action:      "USER_CREATED",
-          targetTable: "users",
-          targetId:    newUser.id,
-          notes:       `User "${newUser.name}" (${newUser.email}) created with role ${newUser.role}.`,
-          oldValues:   null,
-          newValues:   { name: newUser.name, email: newUser.email, role: newUser.role },
-        })
-      );
-
-      return newUser;
+    const response = await fetch(`${API_BASE_URL}/api/v1/users`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+      body: JSON.stringify({
+        email: input.email.trim().toLowerCase(),
+        password: input.password,
+        firstName,
+        lastName,
+        profileName: input.profileName,
+        roleName: input.roleName,
+        departmentName: input.departmentName || undefined,
+      }),
     });
 
+
+    if (response.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      return { error: errData.message || "Failed to create user." };
+    }
+
+
+    const u = await response.json();
     revalidatePath("/");
+
 
     return {
       user: {
-        id:        created.id,
-        name:      created.name,
-        email:     created.email,
-        role:      created.role,
-        isActive:  true,
+        id: u.id,
+        name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
+        email: u.email,
+        role: mapProfileToRole(input.profileName),
+        isActive: !u.deletedAt,
         createdAt: new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }),
       },
     };
@@ -151,86 +264,81 @@ export async function createUserAction(
   }
 }
 
-// ─── Update user details (Founder only) ──────────────────────────────────────
+
+// ─── Update user details (Admin only) ────────────────────────────────────────
+
 
 export async function updateUserAction(
   input: UpdateUserInput
-): Promise<{ user?: UserRow; error?: string }> {
+): Promise<{ user?: UserRow; error?: string; unauthorized?: boolean }> {
   const session = await getSession();
-  if (!session) return { error: "Not authenticated." };
-  if (session.role !== UserRole.FOUNDER) return { error: "Only Founders can edit users." };
-  if (!process.env.DATABASE_URL) return { error: "Database not configured." };
+  if (!session || !session.accessToken) return { unauthorized: true };
+  if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can edit users." };
 
-  if (!input.name.trim())  return { error: "Name is required." };
+
+  if (!input.name.trim()) return { error: "Name is required." };
   if (!input.email.trim()) return { error: "Email is required." };
   if (input.password && input.password.length < 6)
     return { error: "Password must be at least 6 characters." };
 
+
   try {
-    const updated = await withDb(async (ds) => {
-      const userRepo  = ds.getRepository<IUser>("User");
-      const auditRepo = ds.getRepository<IAuditLog>("AuditLog");
+    const nameParts = input.name.trim().split(/\s+/);
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ") || "User";
 
-      const existing = await userRepo.findOne({ where: { id: input.id } });
-      if (!existing) throw new Error("User not found.");
 
-      // Check email uniqueness (excluding self)
-      const emailConflict = await ds.query(
-        `SELECT id FROM users WHERE email = $1 AND id != $2`,
-        [input.email.trim().toLowerCase(), input.id]
-      ) as Array<{ id: string }>;
-      if (emailConflict.length > 0) throw new Error("Another user with this email already exists.");
+    const bodyData: any = {
+      email: input.email.trim().toLowerCase(),
+      firstName,
+      lastName,
+      profileName: (input.profileName && input.profileName !== "None") ? input.profileName : undefined,
+      roleName: (input.roleName && input.roleName !== "None") ? input.roleName : undefined,
+      departmentName: (input.departmentName && input.departmentName !== "None") ? input.departmentName : undefined,
+    };
 
-      const oldValues = { name: existing.name, email: existing.email, role: existing.role };
 
-      // Build update query
-      if (input.password) {
-        await ds.query(
-          `UPDATE users SET name=$1, email=$2, role=$3, "passwordHash"=$4 WHERE id=$5`,
-          [input.name.trim(), input.email.trim().toLowerCase(), input.role, input.password, input.id]
-        );
-      } else {
-        await ds.query(
-          `UPDATE users SET name=$1, email=$2, role=$3 WHERE id=$4`,
-          [input.name.trim(), input.email.trim().toLowerCase(), input.role, input.id]
-        );
-      }
+    if (input.password) {
+      bodyData.password = input.password;
+    }
 
-      await auditRepo.save(
-        auditRepo.create({
-          userId:      session.id,
-          action:      "USER_UPDATED",
-          targetTable: "users",
-          targetId:    input.id,
-          notes:       `User "${input.name}" updated by Founder.`,
-          oldValues,
-          newValues:   { name: input.name, email: input.email, role: input.role },
-        })
-      );
 
-      // Fetch updated row
-      const rows = await ds.query(
-        `SELECT id, name, email, role, "isActive", "createdAt" FROM users WHERE id = $1`,
-        [input.id]
-      ) as Array<{ id: string; name: string; email: string; role: UserRole; isActive: boolean; createdAt: Date | string }>;
-      return rows[0];
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${input.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+      body: JSON.stringify(bodyData),
     });
 
+
+    if (response.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      return { error: errData.message || "Failed to update user." };
+    }
+
+
+    const u = await response.json();
     revalidatePath("/");
+
 
     return {
       user: {
-        id:        updated.id,
-        name:      updated.name,
-        email:     updated.email,
-        role:      updated.role,
-        isActive:  updated.isActive ?? true,
-        createdAt:
-          updated.createdAt instanceof Date
-            ? updated.createdAt.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-            : updated.createdAt
-            ? new Date(updated.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-            : "",
+        id: u.id,
+        name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
+        email: u.email,
+        role: mapProfileToRole(input.profileName),
+        isActive: !u.deletedAt,
+        createdAt: u.createdAt
+          ? new Date(u.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+          : "",
       },
     };
   } catch (err) {
@@ -239,39 +347,45 @@ export async function updateUserAction(
   }
 }
 
-// ─── Toggle active/inactive (Founder only) ────────────────────────────────────
+
+// ─── Toggle active/inactive (Admin only) ──────────────────────────────────────
+
 
 export async function toggleUserActiveAction(
   userId: string,
   isActive: boolean
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; unauthorized?: boolean }> {
   const session = await getSession();
-  if (!session) return { error: "Not authenticated." };
-  if (session.role !== UserRole.FOUNDER) return { error: "Only Founders can activate/deactivate users." };
+  if (!session || !session.accessToken) return { unauthorized: true };
+  if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can activate/deactivate users." };
   if (userId === session.id) return { error: "You cannot deactivate your own account." };
-  if (!process.env.DATABASE_URL) return { error: "Database not configured." };
+
 
   try {
-    await withDb(async (ds) => {
-      await ensureIsActiveColumn(ds);
-      await ds.query(`UPDATE users SET "isActive" = $1 WHERE id = $2`, [isActive, userId]);
+    if (isActive) {
+      return { error: "Re-activating a soft-deleted user is not supported by the backend API. Please create a new user." };
+    }
 
-      const auditRepo = ds.getRepository<IAuditLog>("AuditLog");
-      const target = await ds.query(`SELECT name FROM users WHERE id = $1`, [userId]) as Array<{ name: string }>;
 
-      await auditRepo.save(
-        auditRepo.create({
-          userId:      session.id,
-          action:      isActive ? "USER_ACTIVATED" : "USER_DEACTIVATED",
-          targetTable: "users",
-          targetId:    userId,
-          notes:       `User "${target[0]?.name ?? userId}" ${isActive ? "activated" : "deactivated"} by Founder.`,
-          oldValues:   { isActive: !isActive },
-          newValues:   { isActive },
-        })
-      );
+    // Deactivating is done via DELETE (soft delete) in NestJS backend
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+      },
     });
 
+
+    if (response.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      return { error: errData.message || "Failed to deactivate user." };
+    }
     revalidatePath("/");
     return {};
   } catch (err) {
@@ -279,3 +393,231 @@ export async function toggleUserActiveAction(
     return { error: err instanceof Error ? err.message : "Failed to update user status." };
   }
 }
+
+
+export interface UserDetailPayload {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  profileName: string;
+  profileId: string;
+  roleName: string;
+  departmentName: string;
+  isActive: boolean;
+  createdAt: string;
+  permissions: {
+    assigned: { code: string; module: string; entity: string; action: string }[];
+    unassigned: { code: string; module: string; entity: string; action: string }[];
+  };
+  permissionSets?: any[];
+}
+
+
+export async function fetchUserDetailAction(userId: string): Promise<{ user?: UserDetailPayload; error?: string; unauthorized?: boolean }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { unauthorized: true };
+
+
+  try {
+    const headers = { Authorization: `Bearer ${session.accessToken}` };
+
+
+    // 1. Fetch user record
+    const userRes = await fetch(`${API_BASE_URL}/api/v1/users/${userId}`, { headers });
+    if (userRes.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+    if (!userRes.ok) return { error: "User not found." };
+    const u = await userRes.json();
+
+
+    // 2. Fetch all system permissions
+    const permsRes = await fetch(`${API_BASE_URL}/api/v1/permissions`, { headers });
+    if (permsRes.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+    const allPerms = permsRes.ok ? await permsRes.json() : [];
+
+
+    // 3. Fetch the profile details of the user (to know which permissions the profile has)
+    const profilesRes = await fetch(`${API_BASE_URL}/api/v1/profiles`, { headers });
+    if (profilesRes.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+    const profiles = profilesRes.ok ? await profilesRes.json() : [];
+    const userProfile = profiles.find((p: any) => p.id === u.profileId);
+
+    const profilePermCodes = new Set<string>();
+    if (userProfile && userProfile.profilePermissions) {
+      for (const pp of userProfile.profilePermissions) {
+        if (pp.permission?.code) {
+          profilePermCodes.add(pp.permission.code);
+        }
+      }
+    }
+
+
+    // 4. Collect user custom permission set codes
+    const customPermCodes = new Set<string>();
+    if (u.userPermissionSets) {
+      for (const ups of u.userPermissionSets) {
+        if (ups.permissionSet?.permissionSetPerms) {
+          for (const psp of ups.permissionSet.permissionSetPerms) {
+            if (psp.permission?.code) {
+              customPermCodes.add(psp.permission.code);
+            }
+          }
+        }
+      }
+    }
+
+
+    // Combined assigned codes
+    const assignedCodes = new Set([...profilePermCodes, ...customPermCodes]);
+
+
+    const assigned: any[] = [];
+    const unassigned: any[] = [];
+
+
+    for (const p of allPerms) {
+      const item = {
+        code: p.code,
+        module: p.module || "System",
+        entity: p.entity || "General",
+        action: p.action || "Access",
+      };
+      if (assignedCodes.has(p.code)) {
+        assigned.push(item);
+      } else {
+        unassigned.push(item);
+      }
+    }
+
+
+    return {
+      user: {
+        id: u.id,
+        firstName: u.firstName || "",
+        lastName: u.lastName || "",
+        email: u.email,
+        profileName: u.profile?.name || "None",
+        profileId: u.profileId,
+        roleName: u.role?.name || "None",
+        departmentName: u.department?.name || "None",
+        isActive: !u.deletedAt,
+        createdAt: u.createdAt
+          ? new Date(u.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+          : "",
+        permissions: { assigned, unassigned },
+        permissionSets: u.userPermissionSets || [],
+      },
+    };
+  } catch (err) {
+    console.error("[fetchUserDetailAction]", err);
+    return { error: "Failed to load user details." };
+  }
+}
+
+
+export async function fetchPermissionSetsAction(): Promise<{ permissionSets?: any[]; error?: string; unauthorized?: boolean }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { unauthorized: true };
+
+
+  try {
+    const headers = { Authorization: `Bearer ${session.accessToken}` };
+    const res = await fetch(`${API_BASE_URL}/api/v1/permission-sets`, { headers, cache: "no-store" });
+    if (res.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+    if (!res.ok) {
+      throw new Error(`Failed to fetch permission sets (Status: ${res.status})`);
+    }
+    const permissionSets = await res.json();
+    return { permissionSets: Array.isArray(permissionSets) ? permissionSets : [] };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Failed to fetch permission sets." };
+  }
+}
+
+
+export async function assignUserPermissionSetsAction(
+  userId: string,
+  permissionSetIds: string[]
+): Promise<{ success?: boolean; error?: string; unauthorized?: boolean }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { unauthorized: true };
+  if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can edit user permission set assignments." };
+
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
+    const res = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/permission-sets`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ permissionSetIds }),
+    });
+
+
+    if (res.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || "Failed to update permission set assignments.");
+    }
+    revalidatePath("/");
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Failed to update permission set assignments." };
+  }
+}
+
+
+export async function deleteUserAction(
+  userId: string
+): Promise<{ success?: boolean; error?: string; unauthorized?: boolean }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { unauthorized: true };
+  if (session.role !== UserRole.ADMIN) return { error: "Only Administrators can delete users." };
+
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+    };
+    const res = await fetch(`${API_BASE_URL}/api/v1/users/${userId}`, {
+      method: "DELETE",
+      headers,
+    });
+
+
+    if (res.status === 401) {
+      await destroySession();
+      return { unauthorized: true };
+    }
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || "Failed to delete user.");
+    }
+    revalidatePath("/");
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Failed to delete user." };
+  }
+}
+
+
+
+
+

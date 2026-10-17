@@ -1,24 +1,27 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+
+import { useState, useRef, useMemo, useCallback } from "react";
+import Header from "@/components/ats/Header";
+import Sidebar from "@/components/ats/Sidebar";
+import Toast from "@/components/ats/Toast";
+import PipelineBoard from "@/components/ats/PipelineBoard";
 import {
-  Candidate,
-  AuditEntry,
   Role,
   Tab,
   Job,
+  Candidate,
+  AuditEntry,
 } from "@/lib/atsStore";
-import { SessionPayload } from "@/lib/auth-config";
 import { UserRole } from "@/lib/enums";
-import { RolePermissions, DEFAULT_ROLE_PERMISSIONS } from "@/lib/permissions";
-import { InitialData } from "@/app/actions/data";
+import { SessionPayload } from "@/lib/auth-config";
+import {
+  movePipelineAction,
+  saveScorecardAction,
+  approveOfferAction,
+  rejectOfferAction,
+} from "@/app/actions/scorecard";
 import { writeAuditAction } from "@/app/actions/audit";
-import { saveRolePermissionsAction } from "@/app/actions/permissions";
-import { movePipelineAction, saveScorecardAction, approveOfferAction, rejectOfferAction } from "@/app/actions/scorecard";
-import Header from "@/components/ats/Header";
-import Sidebar from "@/components/ats/Sidebar";
-import Toast, { ToastState } from "@/components/ats/Toast";
-import PipelineBoard from "@/components/ats/PipelineBoard";
 import AddCandidateModal from "@/components/ats/AddCandidateModal";
 import EvaluationWorkspace from "@/components/ats/EvaluationWorkspace";
 import AnalyticsPanel from "@/components/ats/AnalyticsPanel";
@@ -28,44 +31,114 @@ import PermissionsPanel from "@/components/ats/PermissionsPanel";
 import ApplicantsPanel from "@/components/ats/ApplicantsPanel";
 import JobAssignmentPanel from "@/components/ats/JobAssignmentPanel";
 import UsersPanel from "@/components/ats/UsersPanel";
+import UserRecordPanel from "@/components/ats/UserRecordPanel";
+import HomePanel from "@/components/ats/HomePanel";
 
-const TOTAL_BUDGET = 600000;
 
-function toRole(userRole: UserRole): Role {
-  return userRole === UserRole.FOUNDER ? "founder" : "recruiter";
-}
+const TOTAL_BUDGET = 1200000;
+
 
 interface ATSClientProps {
-  user: SessionPayload;
-  initialData: InitialData;
+  user: SessionPayload & {
+    profile?: {
+      id: string;
+      name: string;
+      permissions: {
+        canViewJobs?: boolean;
+        canViewCandidates?: boolean;
+        canAddJob?: boolean;
+        canIngestCandidate?: boolean;
+        canDragPipeline?: boolean;
+        canViewAuditLog?: boolean;
+        canApproveOffer?: boolean;
+        canViewAnalytics?: boolean;
+        canEditScorecard?: boolean;
+        canManagePermissions?: boolean;
+        canAssignJobs?: boolean;
+      };
+    };
+  };
+  initialData?: {
+    jobs: Job[];
+    candidates: Candidate[];
+    auditLogs: AuditEntry[];
+  };
+  jobs?: Job[];
+  candidates?: Candidate[];
+  auditLogs?: AuditEntry[];
 }
 
-export default function ATSClient({ user, initialData }: ATSClientProps) {
-  const [role, setRole] = useState<Role>(() => toRole(user.role));
-  const [tab, setTab] = useState<Tab>("pipeline");
-  const [theme, setTheme] = useState<"dark" | "light">("light");
-  const [candidates, setCandidates] = useState<Candidate[]>(initialData.candidates);
-  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>(initialData.auditLogs);
-  const [jobs, setJobs] = useState<Job[]>(initialData.jobs);
-  const [rolePermissions, setRolePermissions] = useState<RolePermissions>(
-    initialData.rolePermissions ?? DEFAULT_ROLE_PERMISSIONS
-  );
-  const [activeCandidateId, setActiveCandidateId] = useState<string | null>(null);
+
+export default function ATSClient({
+  user,
+  initialData,
+  jobs: propsJobs,
+  candidates: propsCandidates,
+  auditLogs: propsAuditLogs,
+}: ATSClientProps) {
+  const initialJobs = initialData?.jobs ?? propsJobs ?? [];
+  const initialCandidates = initialData?.candidates ?? propsCandidates ?? [];
+  const initialAuditLogs = initialData?.auditLogs ?? propsAuditLogs ?? [];
+
+
+  const [tab, setTab] = useState<Tab>("home");
+
+
+  const [role, setRole] = useState<Role>("founder");
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [toast, setToast] = useState({ title: "", message: "", icon: "", visible: false });
+  const [jobs, setJobs] = useState<Job[]>(initialJobs);
+  const [candidates, setCandidates] = useState<Candidate[]>(initialCandidates);
+  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>(initialAuditLogs);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [toast, setToast] = useState<ToastState>({ title: "", message: "", icon: "info", visible: false });
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [activeCandidateId, setActiveCandidateId] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [, setActivePermissionRole] = useState<UserRole | null>(null);
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
 
-  const myPerms = rolePermissions[user.role];
-  const isFounder = user.role === UserRole.FOUNDER;
 
-  useEffect(() => {
-    const html = document.documentElement;
-    theme === "dark" ? html.classList.add("dark") : html.classList.remove("dark");
-  }, [theme]);
+  const toastTimer = useRef<NodeJS.Timeout | null>(null);
+
+
+  const isFounder = role === "founder" && user.role === UserRole.ADMIN;
+
+
+  const myPerms = useMemo(() => {
+    if (isFounder) {
+      return {
+        canViewJobs: true,
+        canViewCandidates: true,
+        canAddJob: true,
+        canIngestCandidate: true,
+        canDragPipeline: true,
+        canViewAuditLog: true,
+        canApproveOffer: true,
+        canViewAnalytics: true,
+        canEditScorecard: true,
+        canManagePermissions: true,
+        canAssignJobs: true,
+      };
+    }
+    const dbPerms = user.profile?.permissions || {};
+    return {
+      canViewJobs: (dbPerms as any).recruitmentJobRead !== false && dbPerms.canViewJobs !== false,
+      canViewCandidates: (dbPerms as any).recruitmentCandidateRead !== false && dbPerms.canViewCandidates !== false,
+      canAddJob: !!((dbPerms as any).recruitmentJobCreate ?? dbPerms.canAddJob),
+      canIngestCandidate: !!((dbPerms as any).recruitmentCandidateCreate ?? dbPerms.canIngestCandidate),
+      canDragPipeline: !!((dbPerms as any).recruitmentCandidateUpdate ?? dbPerms.canDragPipeline),
+      canViewAuditLog: !!dbPerms.canViewAuditLog,
+      canApproveOffer: !!dbPerms.canApproveOffer,
+      canViewAnalytics: !!dbPerms.canViewAnalytics,
+      canEditScorecard: !!((dbPerms as any).recruitmentCandidateUpdate ?? dbPerms.canEditScorecard),
+      canManagePermissions: !!dbPerms.canManagePermissions,
+      canAssignJobs: !!dbPerms.canAssignJobs,
+    };
+  }, [isFounder, user.profile]);
+
 
   const showToast = useCallback((title: string, msg: string, icon = "info") => {
     if (msg === "__OPEN_ADD_MODAL__") {
-      if (!rolePermissions[user.role].canIngestCandidate) return;
+      if (!myPerms.canIngestCandidate) return;
       setShowAddModal(true);
       return;
     }
@@ -74,7 +147,15 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
     toastTimer.current = setTimeout(() => {
       setToast((prev) => ({ ...prev, visible: false }));
     }, 4000);
-  }, [rolePermissions, user.role]);
+  }, [myPerms.canIngestCandidate]);
+
+
+  const handleNavigateToRolePermissions = useCallback((role: UserRole) => {
+    setActivePermissionRole(role);
+    setTab("permissions");
+    setSelectedUserId(null);
+  }, []);
+
 
   function handleRoleChange(newRole: Role) {
     setRole(newRole);
@@ -86,6 +167,7 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
     }
   }
 
+
   function handleThemeToggle() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
@@ -96,33 +178,39 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
     );
   }
 
+
   function addAuditLog(entry: AuditEntry) {
     setAuditLogs((prev) => [...prev, entry]);
   }
 
-  async function persistAudit(entry: AuditEntry, targetTable = "system", targetId = "—") {
+
+  async function persistAudit(entry: AuditEntry, resource = "system", resourceId = "—") {
     addAuditLog(entry);
     await writeAuditAction({
       action: entry.action,
-      targetTable,
-      targetId,
+      resource,
+      targetId: resourceId,
       notes: entry.notes,
-    }).catch(() => {});
+    }).catch(() => { });
   }
+
 
   function handleSaveCandidate(candidate: Candidate, auditEntry: AuditEntry) {
     setCandidates((prev) => [...prev, candidate]);
     addAuditLog(auditEntry);
   }
 
+
   function handleJobAdd(job: Job, audit: AuditEntry) {
     setJobs((prev) => [...prev, job]);
     addAuditLog(audit);
   }
 
+
   async function handleCandidateUpdate(updated: Candidate) {
     setCandidates((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
   }
+
 
   async function handleMoveStage(
     candidateId: string,
@@ -130,9 +218,9 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
     proposedSalary?: number,
     proposedEquity?: number
   ) {
-    // Optimistic update handled in PipelineBoard; persist to DB
-    await movePipelineAction(candidateId, targetStage, proposedSalary, proposedEquity).catch(() => {});
+    await movePipelineAction(candidateId, targetStage, proposedSalary, proposedEquity).catch(() => { });
   }
+
 
   async function handleSaveScorecard(
     applicationId: string,
@@ -146,33 +234,30 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
       pros: scorecard.pros,
       cons: scorecard.cons,
       recommendation: scorecard.recommendation,
-    }).catch(() => {});
+    }).catch(() => { });
   }
+
 
   async function handleApproveOffer(applicationId: string) {
-    await approveOfferAction(applicationId).catch(() => {});
+    await approveOfferAction(applicationId).catch(() => { });
   }
+
 
   async function handleRejectOffer(applicationId: string) {
-    await rejectOfferAction(applicationId).catch(() => {});
+    await rejectOfferAction(applicationId).catch(() => { });
   }
 
-  async function handleSavePermissions(role: UserRole, set: import("@/lib/permissions").PermissionSet, next: RolePermissions) {
-    setRolePermissions(next);
-    const result = await saveRolePermissionsAction(role, set).catch((err) => ({ error: String(err) }));
-    if (result?.error) {
-      showToast("Save Failed", result.error, "xmark");
-    }
-  }
 
   const allocated = candidates.reduce(
     (acc, c) => acc + (c.proposedSalary || c.expectedSalary || 0),
     0
   );
 
+
   const activeCandidate = activeCandidateId
     ? candidates.find((c) => c.id === activeCandidateId) ?? null
     : null;
+
 
   return (
     <>
@@ -187,6 +272,7 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
         onToast={showToast}
       />
 
+
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           role={role}
@@ -195,14 +281,28 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
           candidateCount={candidates.length}
           jobCount={jobs.length}
           permissions={myPerms}
-          onTabChange={setTab}
+          onTabChange={(t) => {
+            setTab(t);
+            setSelectedUserId(null);
+          }}
           onToast={showToast}
         />
+
 
         <main className="flex-1 bg-slate-50 dark:bg-slate-950 flex flex-col overflow-hidden relative transition-colors duration-200">
           <Toast toast={toast} />
 
+
           <div className="flex-1 flex flex-col overflow-hidden p-6">
+            {tab === "home" && (
+              <HomePanel
+                user={user}
+                onNavigate={(t) => {
+                  setTab(t as Tab);
+                  setSelectedUserId(null);
+                }}
+              />
+            )}
 
             {tab === "pipeline" && (
               <PipelineBoard
@@ -218,6 +318,7 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
               />
             )}
 
+
             {tab === "jobs" && (
               <JobsPanel
                 jobs={jobs}
@@ -228,17 +329,20 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
               />
             )}
 
+
             {tab === "analytics" && (
               myPerms.canViewAnalytics
                 ? <AnalyticsPanel candidates={candidates} totalBudget={TOTAL_BUDGET} />
                 : <PermissionDenied label="Talent ROI Analytics" />
             )}
 
+
             {tab === "audit" && (
               myPerms.canViewAuditLog
                 ? <AuditLogPanel logs={auditLogs} />
                 : <PermissionDenied label="Security Audit Log" />
             )}
+
 
             {tab === "applicants" && (
               <ApplicantsPanel
@@ -249,24 +353,41 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
               />
             )}
 
+
             {tab === "assignments" && (
-              (isFounder || user.role === UserRole.HEAD_OF_HR)
+              isFounder
                 ? <JobAssignmentPanel jobs={jobs} onToast={showToast} />
                 : <PermissionDenied label="Job Assignment Manager" />
             )}
 
+
             {tab === "users" && (
               isFounder
-                ? <UsersPanel onToast={showToast} />
+                ? (selectedUserId
+                  ? (
+                    <UserRecordPanel
+                      userId={selectedUserId}
+                      onBack={() => setSelectedUserId(null)}
+                      onToast={showToast}
+                      onNavigateToProfile={(profileId) => {
+                        setSelectedUserId(null);
+                        setActiveProfileId(profileId);
+                        setTab("permissions");
+                      }}
+                    />
+                  )
+                  : <UsersPanel onToast={showToast} onNavigateToRolePermissions={handleNavigateToRolePermissions} onSelectUserId={setSelectedUserId} />
+                )
                 : <PermissionDenied label="User Management" />
             )}
+
 
             {tab === "permissions" && (
               isFounder
                 ? (
                   <PermissionsPanel
-                    permissions={rolePermissions}
-                    onPermissionsChange={handleSavePermissions}
+                    initialSelectedProfileId={activeProfileId}
+                    onClearInitialProfile={() => setActiveProfileId(null)}
                     onAuditLog={(entry) => persistAudit(entry, "role_permissions", entry.target)}
                     onToast={showToast}
                   />
@@ -277,6 +398,7 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
         </main>
       </div>
 
+
       {showAddModal && myPerms.canIngestCandidate && (
         <AddCandidateModal
           jobs={jobs}
@@ -286,10 +408,12 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
         />
       )}
 
+
       {activeCandidate && (
         <EvaluationWorkspace
           candidate={activeCandidate}
           role={role}
+          canEditScorecard={myPerms.canEditScorecard}
           onClose={() => setActiveCandidateId(null)}
           onCandidateUpdate={handleCandidateUpdate}
           onAuditLog={(entry) => persistAudit(entry, "scorecards", activeCandidate.id)}
@@ -302,6 +426,7 @@ export default function ATSClient({ user, initialData }: ATSClientProps) {
     </>
   );
 }
+
 
 function PermissionDenied({ label }: { label: string }) {
   return (
@@ -321,3 +446,6 @@ function PermissionDenied({ label }: { label: string }) {
     </div>
   );
 }
+
+
+

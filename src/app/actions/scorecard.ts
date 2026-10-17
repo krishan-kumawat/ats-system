@@ -1,14 +1,14 @@
 "use server";
 
+
 import { revalidatePath } from "next/cache";
-import { v4 as uuidv4 } from "uuid";
-import { withDb } from "@/db/data-source";
-import { IScorecard, IFounderApproval, IApplication, IAuditLog } from "@/db/schemas";
-import { ApprovalStatus, Recommendation, ApplicationStage } from "@/lib/enums";
 import { getSession } from "@/lib/auth";
 import { Candidate } from "@/lib/atsStore";
+import { API_BASE_URL } from "@/lib/api";
+
 
 // ─── Save scorecard ───────────────────────────────────────────────────────────
+
 
 export interface SaveScorecardInput {
   applicationId: string;
@@ -20,59 +20,43 @@ export interface SaveScorecardInput {
   recommendation: string;
 }
 
+
 export async function saveScorecardAction(input: SaveScorecardInput): Promise<{ error?: string }> {
   const session = await getSession();
-  if (!session) return { error: "Unauthorized" };
-  if (!process.env.DATABASE_URL) return {};
+  if (!session || !session.accessToken) return { error: "Unauthorized" };
+
 
   try {
-    await withDb(async (ds) => {
-      const repo = ds.getRepository<IScorecard>("Scorecard");
-      const existing = await repo.findOne({ where: { applicationId: input.applicationId } });
+    const [candidateId, jobId] = input.applicationId.split("::");
+    if (!candidateId || !jobId) throw new Error("Invalid application structure.");
 
-      if (existing) {
-        existing.technicalScore = input.technicalScore;
-        existing.systemScore = input.systemScore;
-        existing.cultureScore = input.cultureScore;
-        existing.pros = input.pros || null;
-        existing.cons = input.cons || null;
-        existing.recommendation = input.recommendation as Recommendation;
-        await repo.save(existing);
-      } else {
-        await repo.save(
-          repo.create({
-            id: uuidv4(),
-            applicationId: input.applicationId,
-            reviewerId: session.id,
-            technicalScore: input.technicalScore,
-            systemScore: input.systemScore,
-            cultureScore: input.cultureScore,
-            pros: input.pros || null,
-            cons: input.cons || null,
-            recommendation: input.recommendation as Recommendation,
-          })
-        );
-      }
 
-      const avg = ((input.technicalScore + input.systemScore + input.cultureScore) / 3).toFixed(1);
-      const auditRepo = ds.getRepository<IAuditLog>("AuditLog");
-      await auditRepo.save(
-        auditRepo.create({
-          userId: session.id,
-          action: "LOGGED_SCORECARD",
-          targetTable: "scorecards",
-          targetId: input.applicationId,
-          notes: `Average ratings: ${avg}/5. Recommendation: ${input.recommendation || "NONE"}.`,
-          oldValues: null,
-          newValues: {
-            technicalScore: input.technicalScore,
-            systemScore: input.systemScore,
-            cultureScore: input.cultureScore,
-            recommendation: input.recommendation,
-          },
-        })
-      );
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
+
+
+    // Update candidate job scorecard fields
+    const res = await fetch(`${API_BASE_URL}/api/v1/candidates/${candidateId}/jobs/${jobId}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({
+        technicalScore: input.technicalScore,
+        systemScore: input.systemScore,
+        cultureScore: input.cultureScore,
+        pros: input.pros || "",
+        cons: input.cons || "",
+        recommendation: input.recommendation,
+      }),
     });
+
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Backend error: ${res.status} ${errText}`);
+    }
+
 
     revalidatePath("/");
     return {};
@@ -82,46 +66,42 @@ export async function saveScorecardAction(input: SaveScorecardInput): Promise<{ 
   }
 }
 
+
 // ─── Approve offer ────────────────────────────────────────────────────────────
+
 
 export async function approveOfferAction(applicationId: string): Promise<{ error?: string }> {
   const session = await getSession();
-  if (!session) return { error: "Unauthorized" };
-  if (!process.env.DATABASE_URL) return {};
+  if (!session || !session.accessToken) return { error: "Unauthorized" };
+
 
   try {
-    await withDb(async (ds) => {
-      const approvalRepo = ds.getRepository<IFounderApproval>("FounderApproval");
-      const approval = await approvalRepo.findOne({ where: { applicationId } });
-      if (!approval || approval.status !== ApprovalStatus.PENDING) {
-        throw new Error("No pending offer found for this application.");
-      }
+    const [candidateId, jobId] = applicationId.split("::");
+    if (!candidateId || !jobId) throw new Error("Invalid application structure.");
 
-      approval.status = ApprovalStatus.APPROVED;
-      approval.founderId = session.id;
-      approval.actionedAt = new Date();
-      await approvalRepo.save(approval);
 
-      const appRepo = ds.getRepository<IApplication>("Application");
-      const app = await appRepo.findOne({ where: { id: applicationId } });
-      if (app) {
-        app.stage = ApplicationStage.OFFER_APPROVED;
-        await appRepo.save(app);
-      }
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
 
-      const auditRepo = ds.getRepository<IAuditLog>("AuditLog");
-      await auditRepo.save(
-        auditRepo.create({
-          userId: session.id,
-          action: "OFFER_APPROVED",
-          targetTable: "founder_approvals",
-          targetId: approval.id,
-          notes: `Offer approved. Salary: $${Number(approval.proposedSalary).toLocaleString("en-US")}.`,
-          oldValues: { status: "PENDING" },
-          newValues: { status: "APPROVED", founderId: session.id },
-        })
-      );
+
+    // Approve offer and transition stage to offered
+    const res = await fetch(`${API_BASE_URL}/api/v1/candidates/${candidateId}/jobs/${jobId}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({
+        approvalStatus: "APPROVED",
+        status: "Offered",
+      }),
     });
+
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Backend error: ${res.status} ${errText}`);
+    }
+
 
     revalidatePath("/");
     return {};
@@ -131,50 +111,46 @@ export async function approveOfferAction(applicationId: string): Promise<{ error
   }
 }
 
+
 // ─── Reject offer ─────────────────────────────────────────────────────────────
+
 
 export async function rejectOfferAction(
   applicationId: string,
   feedback?: string
 ): Promise<{ error?: string }> {
   const session = await getSession();
-  if (!session) return { error: "Unauthorized" };
-  if (!process.env.DATABASE_URL) return {};
+  if (!session || !session.accessToken) return { error: "Unauthorized" };
+
 
   try {
-    await withDb(async (ds) => {
-      const approvalRepo = ds.getRepository<IFounderApproval>("FounderApproval");
-      const approval = await approvalRepo.findOne({ where: { applicationId } });
-      if (!approval || approval.status !== ApprovalStatus.PENDING) {
-        throw new Error("No pending offer found for this application.");
-      }
+    const [candidateId, jobId] = applicationId.split("::");
+    if (!candidateId || !jobId) throw new Error("Invalid application structure.");
 
-      approval.status = ApprovalStatus.REJECTED;
-      approval.founderId = session.id;
-      approval.feedback = feedback ?? null;
-      approval.actionedAt = new Date();
-      await approvalRepo.save(approval);
 
-      const appRepo = ds.getRepository<IApplication>("Application");
-      const app = await appRepo.findOne({ where: { id: applicationId } });
-      if (app) {
-        app.stage = ApplicationStage.INTERVIEWING;
-        await appRepo.save(app);
-      }
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
 
-      const auditRepo = ds.getRepository<IAuditLog>("AuditLog");
-      await auditRepo.save(
-        auditRepo.create({
-          userId: session.id,
-          action: "OFFER_REJECTED",
-          targetTable: "founder_approvals",
-          targetId: approval.id,
-          notes: feedback ?? "Offer returned for budget readjustments.",
-          oldValues: { status: "PENDING" },
-          newValues: { status: "REJECTED", founderId: session.id },
-        })
-      );
+
+    // Reject offer and revert status back to interviewing
+    const res = await fetch(`${API_BASE_URL}/api/v1/candidates/${candidateId}/jobs/${jobId}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({
+        approvalStatus: "REJECTED",
+        approvalFeedback: feedback || "Returned by founder.",
+        status: "Interviewing",
+      }),
     });
+
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Backend error: ${res.status} ${errText}`);
+    }
+
 
     revalidatePath("/");
     return {};
@@ -184,7 +160,9 @@ export async function rejectOfferAction(
   }
 }
 
+
 // ─── Move pipeline stage ──────────────────────────────────────────────────────
+
 
 export async function movePipelineAction(
   applicationId: string,
@@ -193,58 +171,56 @@ export async function movePipelineAction(
   proposedEquity?: number
 ): Promise<{ error?: string }> {
   const session = await getSession();
-  if (!session) return { error: "Unauthorized" };
-  if (!process.env.DATABASE_URL) return {};
+  if (!session || !session.accessToken) return { error: "Unauthorized" };
+
 
   try {
-    await withDb(async (ds) => {
-      const appRepo = ds.getRepository<IApplication>("Application");
-      const app = await appRepo.findOne({ where: { id: applicationId } });
-      if (!app) throw new Error("Application not found.");
+    const [candidateId, jobId] = applicationId.split("::");
+    if (!candidateId || !jobId) throw new Error("Invalid application structure.");
 
-      const oldStage = app.stage;
-      const stageMap: Record<Candidate["stage"], ApplicationStage> = {
-        Applied:      ApplicationStage.APPLIED,
-        Screening:    ApplicationStage.SCREENING,
-        Interviewing: ApplicationStage.INTERVIEWING,
-        Offer:        ApplicationStage.OFFER_PREP,
-      };
 
-      app.stage = stageMap[targetStage];
-      await appRepo.save(app);
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
 
-      if (targetStage === "Offer" && proposedSalary) {
-        const approvalRepo = ds.getRepository<IFounderApproval>("FounderApproval");
-        const existing = await approvalRepo.findOne({ where: { applicationId } });
-        if (!existing) {
-          await approvalRepo.save(
-            approvalRepo.create({
-              id: uuidv4(),
-              applicationId,
-              founderId: null,
-              proposedSalary,
-              proposedEquity: proposedEquity ?? null,
-              status: ApprovalStatus.PENDING,
-              feedback: null,
-              actionedAt: null,
-            })
-          );
-        }
-      }
 
-      const auditRepo = ds.getRepository<IAuditLog>("AuditLog");
-      await auditRepo.save(
-        auditRepo.create({
-          userId: session.id,
-          action: "STAGE_TRANSITION",
-          targetTable: "applications",
-          targetId: applicationId,
-          notes: `Dragged & Dropped: ${oldStage} → ${app.stage}.`,
-          oldValues: { stage: oldStage },
-          newValues: { stage: app.stage },
-        })
-      );
+    const statusMap: Record<Candidate["stage"], string> = {
+      Applied: "Applied",
+      Screening: "Screening",
+      Interviewing: "Interviewing",
+      Offer: "Offered",
+    };
+
+
+    const updatePayload: any = {
+      status: statusMap[targetStage],
+    };
+
+
+    if (proposedSalary !== undefined) {
+      updatePayload.proposedSalary = Number(proposedSalary);
+    }
+    if (proposedEquity !== undefined) {
+      updatePayload.proposedEquity = Number(proposedEquity);
+    }
+    if (targetStage === "Offer") {
+      updatePayload.approvalStatus = "PENDING";
+    }
+
+
+    const res = await fetch(`${API_BASE_URL}/api/v1/candidates/${candidateId}/jobs/${jobId}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(updatePayload),
     });
+
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Backend error: ${res.status} ${errText}`);
+    }
+
 
     revalidatePath("/");
     return {};
@@ -254,83 +230,232 @@ export async function movePipelineAction(
   }
 }
 
+
 // ─── Ingest candidate ─────────────────────────────────────────────────────────
 
+
 export interface IngestCandidateInput {
-  name: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   phone?: string;
-  role: string;
-  department: string;
-  skills: string[];
-  expectedSalary: number;
-  jobId?: string;
+  currentLocation?: string;
+  totalExperience?: number;
+  currentCompany?: string;
+  currentDesignation?: string;
+  linkedinUrl?: string;
+  source?: string;
+  candidateStatus?: string;
+  jobId: string;
+  name?: string;
+  role?: string;
+  department?: string;
+  skills?: string[];
+  expectedSalary?: number;
   sourceTag?: string;
+}
+
+export interface JobOption {
+  id: string;
+  title: string;
+  department?: string;
+  status?: string;
+}
+
+export async function fetchJobsListAction(): Promise<JobOption[]> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return [];
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/v1/jobs`, {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const list = Array.isArray(data) ? data : data.jobs || data.data || [];
+    return list.map((j: any) => ({
+      id: j.id,
+      title: j.title || "Untitled Job",
+      department: typeof j.department === "object" ? j.department?.name : j.department || "",
+      status: j.status || "OPEN",
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function ingestCandidateAction(
   input: IngestCandidateInput
-): Promise<{ applicationId: string; error?: string }> {
+): Promise<{ applicationId: string; candidateId?: string; error?: string }> {
   const session = await getSession();
-  if (!session) return { applicationId: "", error: "Unauthorized" };
-
-  if (!process.env.DATABASE_URL) {
-    return { applicationId: `app-${uuidv4().slice(0, 8)}` };
-  }
+  if (!session || !session.accessToken) return { applicationId: "", error: "Unauthorized" };
 
   try {
-    const applicationId = await withDb(async (ds) => {
-      const candidateRepo = ds.getRepository("Candidate");
-      const appRepo = ds.getRepository<IApplication>("Application");
-      const auditRepo = ds.getRepository<IAuditLog>("AuditLog");
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
 
-      const candidateId = uuidv4();
-      await candidateRepo.save(
-        candidateRepo.create({
-          id: candidateId,
-          name: input.name,
-          email: input.email,
-          phone: input.phone ?? null,
-          currentCompany: null,
-          skills: input.skills,
-        })
-      );
+    // 1. Resolve first name and last name
+    let firstName = input.firstName?.trim();
+    let lastName = input.lastName?.trim();
+    if (!firstName && input.name) {
+      const parts = input.name.trim().split(/\s+/);
+      firstName = parts[0] || "";
+      lastName = parts.slice(1).join(" ") || "Candidate";
+    }
 
-      const simulatedFileId = `gdrive_${uuidv4().replace(/-/g, "").slice(0, 20)}`;
-      const appId = uuidv4();
+    const candidatePayload: Record<string, any> = {
+      firstName: firstName || "",
+      lastName: lastName || "",
+      email: input.email.toLowerCase().trim(),
+      jobId: input.jobId?.trim(),
+    };
 
-      await appRepo.save(
-        appRepo.create({
-          id: appId,
-          candidateId,
-          jobId: input.jobId ?? "unassigned",
-          stage: ApplicationStage.APPLIED,
-          sourceTag: input.sourceTag ?? "Manual PDF Upload",
-          gDriveFileId: simulatedFileId,
-          gDriveViewUrl: `https://drive.google.com/file/d/${simulatedFileId}/view`,
-          expectedSalary: input.expectedSalary || null,
-        })
-      );
+    if (input.phone?.trim()) candidatePayload.phone = input.phone.trim();
+    if (input.currentLocation?.trim()) candidatePayload.currentLocation = input.currentLocation.trim();
+    if (input.totalExperience !== undefined && !isNaN(Number(input.totalExperience))) {
+      candidatePayload.totalExperience = Number(input.totalExperience);
+    }
+    if (input.currentCompany?.trim()) candidatePayload.currentCompany = input.currentCompany.trim();
+    if (input.currentDesignation?.trim()) candidatePayload.currentDesignation = input.currentDesignation.trim();
+    if (input.linkedinUrl?.trim()) candidatePayload.linkedinUrl = input.linkedinUrl.trim();
+    if (input.source?.trim()) candidatePayload.source = input.source.trim();
+    if (input.candidateStatus?.trim()) candidatePayload.candidateStatus = input.candidateStatus.trim();
+    if (Array.isArray(input.skills) && input.skills.length > 0) {
+      candidatePayload.skills = input.skills;
+    }
 
-      await auditRepo.save(
-        auditRepo.create({
-          userId: session.id,
-          action: "INGESTED_PROFILE",
-          targetTable: "candidates",
-          targetId: candidateId,
-          notes: `Simulated Google Drive file written. Parsed tags: ${input.skills.slice(0, 3).join(", ")}.`,
-          oldValues: null,
-          newValues: { candidateId, applicationId: appId, name: input.name, skills: input.skills },
-        })
-      );
-
-      return appId;
+    // 2. Create Candidate profile with jobId in payload (backend handles job linking)
+    const createCandRes = await fetch(`${API_BASE_URL}/api/v1/candidates`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(candidatePayload),
     });
 
+    if (!createCandRes.ok) {
+      const errData = await createCandRes.json().catch(() => ({}));
+      const msg = Array.isArray(errData.message)
+        ? errData.message.join(", ")
+        : errData.message || "Failed to create candidate profile on backend.";
+      return { applicationId: "", error: msg };
+    }
+
+    const candidate = await createCandRes.json();
+    const targetJobId = input.jobId?.trim();
+
     revalidatePath("/");
-    return { applicationId };
+    revalidatePath("/[objectApiName]");
+    return {
+      applicationId: targetJobId ? `${candidate.id}::${targetJobId}` : candidate.id,
+      candidateId: candidate.id,
+    };
   } catch (err) {
     console.error("[ingestCandidateAction]", err);
-    return { applicationId: "", error: "Failed to ingest candidate." };
+    return { applicationId: "", error: err instanceof Error ? err.message : "Failed to ingest candidate." };
   }
 }
+
+export interface UpdateCandidateInput {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  currentLocation?: string;
+  totalExperience?: number;
+  currentCompany?: string;
+  currentDesignation?: string;
+  linkedinUrl?: string;
+  source?: string;
+  candidateStatus?: string;
+  resumeUrl?: string;
+  skills?: string[];
+}
+
+export async function updateCandidateAction(
+  candidateId: string,
+  input: UpdateCandidateInput
+): Promise<{ success: boolean; candidate?: any; error?: string }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { success: false, error: "Unauthorized" };
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+    };
+
+    const updatePayload: Record<string, any> = {};
+    if (input.firstName !== undefined) updatePayload.firstName = input.firstName.trim();
+    if (input.lastName !== undefined) updatePayload.lastName = input.lastName.trim();
+    if (input.email !== undefined) updatePayload.email = input.email.toLowerCase().trim();
+    if (input.phone !== undefined) updatePayload.phone = input.phone.trim();
+    if (input.currentLocation !== undefined) updatePayload.currentLocation = input.currentLocation.trim();
+    if (input.totalExperience !== undefined && !isNaN(Number(input.totalExperience))) {
+      updatePayload.totalExperience = Number(input.totalExperience);
+    }
+    if (input.currentCompany !== undefined) updatePayload.currentCompany = input.currentCompany.trim();
+    if (input.currentDesignation !== undefined) updatePayload.currentDesignation = input.currentDesignation.trim();
+    if (input.linkedinUrl !== undefined) updatePayload.linkedinUrl = input.linkedinUrl.trim();
+    if (input.resumeUrl !== undefined) updatePayload.resumeUrl = input.resumeUrl.trim();
+    if (input.source !== undefined) updatePayload.source = input.source.trim();
+    if (input.candidateStatus !== undefined) updatePayload.candidateStatus = input.candidateStatus.trim();
+    if (Array.isArray(input.skills)) updatePayload.skills = input.skills;
+
+    const res = await fetch(`${API_BASE_URL}/api/v1/candidates/${candidateId}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(updatePayload),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const msg = Array.isArray(errData.message)
+        ? errData.message.join(", ")
+        : errData.message || "Failed to update candidate profile.";
+      return { success: false, error: msg };
+    }
+
+    const candidate = await res.json();
+    revalidatePath("/");
+    revalidatePath("/[objectApiName]");
+    return { success: true, candidate };
+  } catch (err) {
+    console.error("[updateCandidateAction]", err);
+    return { success: false, error: err instanceof Error ? err.message : "Failed to update candidate." };
+  }
+}
+
+export async function deleteCandidateAction(
+  candidateId: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session || !session.accessToken) return { success: false, error: "Unauthorized" };
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/v1/candidates/${candidateId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const msg = Array.isArray(errData.message)
+        ? errData.message.join(", ")
+        : errData.message || "Failed to delete candidate.";
+      return { success: false, error: msg };
+    }
+
+    revalidatePath("/");
+    revalidatePath("/[objectApiName]");
+    return { success: true };
+  } catch (err) {
+    console.error("[deleteCandidateAction]", err);
+    return { success: false, error: err instanceof Error ? err.message : "Failed to delete candidate." };
+  }
+}
+
+
+
+
+

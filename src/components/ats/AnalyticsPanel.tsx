@@ -39,7 +39,7 @@ export default function AnalyticsPanel({ candidates, totalBudget }: AnalyticsPan
             Remaining Runrate Budget
           </p>
           <h3 className="text-2xl font-black text-slate-800 dark:text-slate-100">
-            ${remaining.toLocaleString("en-US")}
+            ₹{remaining.toLocaleString("en-IN")}
           </h3>
           <p className="text-[10px] text-slate-500 dark:text-slate-400">
             Calculated directly from active applicant salary requirements.
@@ -51,7 +51,7 @@ export default function AnalyticsPanel({ candidates, totalBudget }: AnalyticsPan
             Total Allocated Budget
           </p>
           <h3 className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
-            ${allocated.toLocaleString("en-US")}
+            ₹{allocated.toLocaleString("en-IN")}
           </h3>
           <p className="text-[10px] text-slate-500 dark:text-slate-400">
             Combined allocations of active loops and offer letters.
@@ -93,8 +93,8 @@ export default function AnalyticsPanel({ candidates, totalBudget }: AnalyticsPan
           />
         </div>
         <div className="flex items-center justify-between text-[11px] text-slate-500">
-          <span>$0.00 base</span>
-          <span>Budget Limit Ceiling: ${totalBudget.toLocaleString("en-US")}</span>
+          <span>₹0.00 base</span>
+          <span>Budget Limit Ceiling: ₹{totalBudget.toLocaleString("en-IN")}</span>
         </div>
       </div>
 

@@ -9,13 +9,21 @@ import {
   Role,
   AuditEntry,
 } from "@/lib/atsStore";
-import { PermissionSet } from "@/lib/permissions";
-
 interface PipelineBoardProps {
   candidates: Candidate[];
   jobs: Job[];
   role: Role;
-  permissions: PermissionSet;
+  permissions: {
+    canAddJob: boolean;
+    canIngestCandidate: boolean;
+    canDragPipeline: boolean;
+    canViewAuditLog: boolean;
+    canApproveOffer: boolean;
+    canViewAnalytics: boolean;
+    canEditScorecard: boolean;
+    canManagePermissions: boolean;
+    canAssignJobs: boolean;
+  };
   onCandidatesChange: (updated: Candidate[]) => void;
   onAuditLog: (entry: AuditEntry) => void;
   onOpenCandidate: (id: string) => void;
@@ -158,7 +166,7 @@ export default function PipelineBoard({
       user: "HRRecruiter_01",
       action: "STAGE_TRANSITION",
       target: cand.name,
-      notes: `Locked state triggered. Budget request ($${salary.toLocaleString("en-US")}) logged for review.`,
+      notes: `Locked state triggered. Budget request (₹${salary.toLocaleString("en-IN")}) logged for review.`,
     });
     onToast("Lock Gate Triggered", `${cand.name} locked pending Founder sign-off.`, "lock");
     onMoveStage?.(salaryModal.candidateId, "Offer", salary, isNaN(equity) ? 0 : equity);
@@ -193,7 +201,7 @@ export default function PipelineBoard({
               will lock this card pending Founder approval.
             </p>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-              Proposed Base Salary (USD)
+              Proposed Base Salary (₹)
             </label>
             <input
               type="text"
@@ -377,7 +385,7 @@ export default function PipelineBoard({
               <span className="text-slate-300 dark:text-slate-600">·</span>
               <span className="text-slate-500 dark:text-slate-400">HM: {selectedJob.hiringManager}</span>
               <span className="text-slate-300 dark:text-slate-600">·</span>
-              <span className="font-semibold text-slate-700 dark:text-slate-300">${(selectedJob.budgetLimit / 1000).toFixed(0)}k</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300">₹{(selectedJob.budgetLimit / 1000).toFixed(0)}k</span>
               <button
                 onClick={() => setSelectedJobId("ALL")}
                 className="ml-0.5 w-4 h-4 rounded flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
@@ -476,33 +484,21 @@ export default function PipelineBoard({
                           className={`bg-white dark:bg-slate-900 border rounded-xl p-4 space-y-3 transition-all shadow-sm relative ${
                             isLocked
                               ? "border-amber-300 dark:border-amber-800 opacity-80 cursor-not-allowed"
-                              : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 cursor-grab active:cursor-grabbing"
+                              : "border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 cursor-grab"
                           }`}
                         >
-                          {/* Card header */}
-                          <div className="flex items-start justify-between">
+                          <div className="flex justify-between items-start gap-2">
                             <div>
-                              <h4 className="font-bold text-xs text-slate-800 dark:text-slate-200 tracking-tight leading-tight">
-                                {cand.name}
-                              </h4>
-                              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-1">
-                                {cand.role}
-                              </p>
+                              <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight">{cand.name}</p>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400">{cand.role}</p>
                             </div>
-                            <div className="flex flex-col items-end gap-1.5">
-                              <span className="text-[9px] text-slate-400 dark:text-slate-500 font-mono">
-                                {cand.id}
+                            {avg && (
+                              <span className="flex-shrink-0 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold px-1.5 py-0.5 rounded border border-indigo-100 dark:border-indigo-900">
+                                {avg}
                               </span>
-                              {avg && (
-                                <span className="bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
-                                  <i className="fa-solid fa-star text-[9px] mr-1" />
-                                  Score: {avg}
-                                </span>
-                              )}
-                            </div>
+                            )}
                           </div>
 
-                          {/* Skills */}
                           <div className="flex flex-wrap gap-1">
                             {cand.skills.slice(0, 3).map((s) => (
                               <span

@@ -9,8 +9,8 @@ import {
   fetchAssignableUsersAction,
   assignJobAction,
   revokeAssignmentAction,
-  AssignmentRow,
-  UserOption,
+  type AssignmentRow,
+  type UserOption,
 } from "@/app/actions/assignments";
 
 interface JobAssignmentPanelProps {
@@ -19,10 +19,10 @@ interface JobAssignmentPanelProps {
 }
 
 const ASSIGNABLE_ROLES = [
-  UserRole.RECRUITER,
   UserRole.ADMIN,
+  UserRole.RECRUITER,
   UserRole.HIRING_MANAGER,
-  UserRole.HEAD_OF_HR,
+  UserRole.READ_ONLY,
 ];
 
 export default function JobAssignmentPanel({ jobs, onToast }: JobAssignmentPanelProps) {
