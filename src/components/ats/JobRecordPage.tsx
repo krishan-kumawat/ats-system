@@ -713,9 +713,15 @@ export default function JobRecordPage({
   );
 
 
-  function handleEditSave(updatedJob: any, audit: AuditEntry) {
+  async function handleEditSave(updatedJob: any, audit: AuditEntry) {
     setFullJob(updatedJob);
     onJobUpdate?.(updatedJob, audit);
+    try {
+      const refreshed = await fetchJobDetailsAction(jobId);
+      if (refreshed) {
+        setFullJob(refreshed);
+      }
+    } catch (_) {}
   }
 
 

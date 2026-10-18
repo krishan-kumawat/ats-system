@@ -13,6 +13,7 @@ import AddCandidateModal from "@/components/ats/AddCandidateModal";
 import EvaluationWorkspace from "@/components/ats/EvaluationWorkspace";
 import JobRecordPage from "@/components/ats/JobRecordPage";
 import UserRecordPage from "@/components/ats/UserRecordPage";
+import DepartmentRecordPage from "@/components/ats/DepartmentRecordPage";
 import { UserRole } from "@/lib/enums";
 import { SessionPayload } from "@/lib/auth-config";
 import { Job, Candidate, AuditEntry } from "@/lib/atsStore";
@@ -71,6 +72,8 @@ export default function ObjectWorkspace({
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [selectedJobRecord, setSelectedJobRecord] = useState<any | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
+  const [selectedDepartmentRecord, setSelectedDepartmentRecord] = useState<any | null>(null);
 
   const toastTimer = useRef<NodeJS.Timeout | null>(null);
   const isFounder = role === "founder" && user.role === UserRole.ADMIN;
@@ -287,6 +290,32 @@ export default function ObjectWorkspace({
         onRowClick={(id) => setSelectedUserId(id)}
       />
     ),
+    Department: selectedDepartmentId ? (
+      <DepartmentRecordPage
+        departmentId={selectedDepartmentId}
+        departmentRecord={selectedDepartmentRecord}
+        onBack={() => {
+          setSelectedDepartmentId(null);
+          setSelectedDepartmentRecord(null);
+        }}
+        onToast={showToast}
+        onDepartmentUpdate={(updated) => {
+          setSelectedDepartmentRecord(updated);
+        }}
+        onDepartmentDelete={() => {
+          setSelectedDepartmentId(null);
+          setSelectedDepartmentRecord(null);
+        }}
+      />
+    ) : (
+      <GenericDataGrid
+        objectApiName="Department"
+        onRowClick={(id, record) => {
+          setSelectedDepartmentId(id);
+          setSelectedDepartmentRecord(record);
+        }}
+      />
+    ),
     Analytics: (
       <AnalyticsPanel
         candidates={candidates}
@@ -305,6 +334,8 @@ export default function ObjectWorkspace({
     setSelectedJobId(null);
     setSelectedJobRecord(null);
     setSelectedUserId(null);
+    setSelectedDepartmentId(null);
+    setSelectedDepartmentRecord(null);
   }, [normName]);
 
   const currentComponent = CUSTOM_COMPONENTS[normName] || (

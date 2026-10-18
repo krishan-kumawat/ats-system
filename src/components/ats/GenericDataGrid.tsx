@@ -7,9 +7,12 @@ import { fetchObjectRecordsAction } from "@/app/actions/data";
 import { deleteProfileAPIAction } from "@/app/actions/permissions";
 import { deleteUserAction } from "@/app/actions/users";
 import { deleteJobAction } from "@/app/actions/jobs";
+import { deleteDepartmentAction } from "@/app/actions/departments";
 import CreateJobModal from "@/components/ats/CreateJobModal";
 import EditJobModal from "@/components/ats/EditJobModal";
 import AddCandidateModal from "@/components/ats/AddCandidateModal";
+import CreateDepartmentModal from "@/components/ats/CreateDepartmentModal";
+import EditDepartmentModal from "@/components/ats/EditDepartmentModal";
 
 
 interface GenericDataGridProps {
@@ -30,7 +33,9 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
   const [search, setSearch] = useState("");
   const [showCreateJobModal, setShowCreateJobModal] = useState(false);
   const [showCreateCandidateModal, setShowCreateCandidateModal] = useState(false);
+  const [showCreateDepartmentModal, setShowCreateDepartmentModal] = useState(false);
   const [editJobRecord, setEditJobRecord] = useState<any | null>(null);
+  const [editDepartmentRecord, setEditDepartmentRecord] = useState<any | null>(null);
 
 
   const [toastMsg, setToastMsg] = useState<{ title: string; message: string; icon: string } | null>(null);
@@ -65,6 +70,9 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
     } else if (objectApiName === "Job") {
       const record = records.find((r) => r.id === recordId);
       if (record) setEditJobRecord(record);
+    } else if (objectApiName === "Department") {
+      const record = records.find((r) => r.id === recordId);
+      if (record) setEditDepartmentRecord(record);
     }
   };
 
@@ -80,6 +88,9 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
         if (res.error) throw new Error(res.error);
       } else if (objectApiName === "Job") {
         const res = await deleteJobAction(recordId);
+        if (res.error) throw new Error(res.error);
+      } else if (objectApiName === "Department") {
+        const res = await deleteDepartmentAction(recordId);
         if (res.error) throw new Error(res.error);
       }
       setRecords((prev) => prev.filter((r) => r.id !== recordId));
@@ -197,6 +208,8 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
                 setShowCreateJobModal(true);
               } else if (objectApiName === "Candidate") {
                 setShowCreateCandidateModal(true);
+              } else if (objectApiName === "Department") {
+                setShowCreateDepartmentModal(true);
               }
             }}
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
@@ -318,7 +331,8 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
                         (objectApiName === "Profile" && field.apiName === "name") ||
                         (objectApiName === "User" && field.apiName === "email") ||
                         (objectApiName === "Job" && field.apiName === "title") ||
-                        (objectApiName === "Candidate" && field.apiName === "name");
+                        (objectApiName === "Candidate" && field.apiName === "name") ||
+                        (objectApiName === "Department" && (field.apiName === "name" || field.apiName === "title"));
 
 
                       const isProfileLink =
@@ -456,6 +470,28 @@ export default function GenericDataGrid({ objectApiName, onRowClick }: GenericDa
         <AddCandidateModal
           onClose={() => setShowCreateCandidateModal(false)}
           onSave={(_cand, _audit) => {
+            reloadRecords();
+          }}
+          onToast={showGridToast}
+        />
+      )}
+
+      {showCreateDepartmentModal && (
+        <CreateDepartmentModal
+          onClose={() => setShowCreateDepartmentModal(false)}
+          onSave={(_dept) => {
+            reloadRecords();
+          }}
+          onToast={showGridToast}
+        />
+      )}
+
+      {editDepartmentRecord && (
+        <EditDepartmentModal
+          record={editDepartmentRecord}
+          onClose={() => setEditDepartmentRecord(null)}
+          onSaved={() => {
+            setEditDepartmentRecord(null);
             reloadRecords();
           }}
           onToast={showGridToast}
