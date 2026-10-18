@@ -326,9 +326,22 @@ export async function updateJobAction(jobId: string, input: CreateJobInput): Pro
 
 
     // 2. Build payload matching updated Job API requirements:
-    // { title, description, departmentId, budgetLimit, workMode, salaryMin, salaryMax }
+    // { title, description, status, departmentId, budgetLimit, workMode, salaryMin, salaryMax }
+    const statusMap: Record<string, string> = {
+      OPEN: "Open",
+      DRAFT: "Draft",
+      ON_HOLD: "On Hold",
+      CLOSED: "Closed",
+      Open: "Open",
+      Draft: "Draft",
+      "On Hold": "On Hold",
+      Closed: "Closed",
+    };
+    const backendStatus = (input.status && statusMap[input.status]) || "Draft";
+
     const updateBody: Record<string, unknown> = {
       title: input.title,
+      status: backendStatus,
     };
     if (input.description) {
       updateBody.description = input.description;
@@ -372,6 +385,8 @@ export async function updateJobAction(jobId: string, input: CreateJobInput): Pro
 
     const updatedJob = await res.json();
     revalidatePath("/");
+    revalidatePath("/jobs");
+    revalidatePath("/[objectApiName]");
 
 
     return {
@@ -423,9 +438,22 @@ export async function updateJobSimpleAction(
     };
 
 
+    const statusMap: Record<string, string> = {
+      OPEN: "Open",
+      DRAFT: "Draft",
+      ON_HOLD: "On Hold",
+      CLOSED: "Closed",
+      Open: "Open",
+      Draft: "Draft",
+      "On Hold": "On Hold",
+      Closed: "Closed",
+    };
+    const backendStatus = (input.status && statusMap[input.status]) || "Draft";
+
     const body: Record<string, unknown> = {
       title: input.title,
       description: input.description,
+      status: backendStatus,
     };
     if (input.departmentId) {
       body.departmentId = input.departmentId;
@@ -464,6 +492,8 @@ export async function updateJobSimpleAction(
 
 
     revalidatePath("/");
+    revalidatePath("/jobs");
+    revalidatePath("/[objectApiName]");
     return { success: true };
   } catch (err: any) {
     console.error("[updateJobSimpleAction]", err);
