@@ -77,6 +77,9 @@ export interface Candidate {
   source?: string;
   candidateStatus?: string;
   resumeUrl?: string;
+  resumeFileId?: string;
+  resumePreviewUrl?: string;
+  resumeDownloadUrl?: string;
 }
 
 export interface AuditEntry {

@@ -285,74 +285,91 @@ export async function fetchJobsListAction(): Promise<JobOption[]> {
 }
 
 export async function ingestCandidateAction(
-  input: IngestCandidateInput
-): Promise<{ applicationId: string; candidateId?: string; error?: string }> {
+  input: IngestCandidateInput | FormData
+): Promise<{ applicationId: string; candidateId?: string; candidate?: any; error?: string }> {
   const session = await getSession();
   if (!session || !session.accessToken) return { applicationId: "", error: "Unauthorized" };
 
   try {
-    const headers = {
-      Authorization: `Bearer ${session.accessToken}`,
-      "Content-Type": "application/json",
-    };
+    const isFormData = typeof FormData !== "undefined" && input instanceof FormData;
+    let res: Response;
+    let targetJobId = "";
 
-    // 1. Resolve first name and last name
-    let firstName = input.firstName?.trim();
-    let lastName = input.lastName?.trim();
-    if (!firstName && input.name) {
-      const parts = input.name.trim().split(/\s+/);
-      firstName = parts[0] || "";
-      lastName = parts.slice(1).join(" ") || "Candidate";
+    if (isFormData) {
+      targetJobId = (input.get("jobId") as string)?.trim() || "";
+      res = await fetch(`${API_BASE_URL}/api/v1/candidates`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+        },
+        body: input,
+      });
+    } else {
+      const headers = {
+        Authorization: `Bearer ${session.accessToken}`,
+        "Content-Type": "application/json",
+      };
+
+      // 1. Resolve first name and last name
+      let firstName = input.firstName?.trim();
+      let lastName = input.lastName?.trim();
+      if (!firstName && input.name) {
+        const parts = input.name.trim().split(/\s+/);
+        firstName = parts[0] || "";
+        lastName = parts.slice(1).join(" ") || "Candidate";
+      }
+
+      targetJobId = input.jobId?.trim() || "";
+      const candidatePayload: Record<string, any> = {
+        firstName: firstName || "",
+        lastName: lastName || "",
+        email: input.email.toLowerCase().trim(),
+        jobId: targetJobId,
+      };
+
+      if (input.phone?.trim()) candidatePayload.phone = input.phone.trim();
+      if (input.currentLocation?.trim()) candidatePayload.currentLocation = input.currentLocation.trim();
+      if (input.totalExperience !== undefined && !isNaN(Number(input.totalExperience))) {
+        candidatePayload.totalExperience = Number(input.totalExperience);
+      }
+      if (input.currentCompany?.trim()) candidatePayload.currentCompany = input.currentCompany.trim();
+      if (input.currentDesignation?.trim()) candidatePayload.currentDesignation = input.currentDesignation.trim();
+      if (input.linkedinUrl?.trim()) candidatePayload.linkedinUrl = input.linkedinUrl.trim();
+      if (input.source?.trim()) candidatePayload.source = input.source.trim();
+      if (input.candidateStatus?.trim()) candidatePayload.candidateStatus = input.candidateStatus.trim();
+      if (Array.isArray(input.skills) && input.skills.length > 0) {
+        candidatePayload.skills = input.skills;
+      }
+
+      // 2. Create Candidate profile with jobId in payload (backend handles job linking)
+      res = await fetch(`${API_BASE_URL}/api/v1/candidates`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(candidatePayload),
+      });
     }
 
-    const candidatePayload: Record<string, any> = {
-      firstName: firstName || "",
-      lastName: lastName || "",
-      email: input.email.toLowerCase().trim(),
-      jobId: input.jobId?.trim(),
-    };
-
-    if (input.phone?.trim()) candidatePayload.phone = input.phone.trim();
-    if (input.currentLocation?.trim()) candidatePayload.currentLocation = input.currentLocation.trim();
-    if (input.totalExperience !== undefined && !isNaN(Number(input.totalExperience))) {
-      candidatePayload.totalExperience = Number(input.totalExperience);
-    }
-    if (input.currentCompany?.trim()) candidatePayload.currentCompany = input.currentCompany.trim();
-    if (input.currentDesignation?.trim()) candidatePayload.currentDesignation = input.currentDesignation.trim();
-    if (input.linkedinUrl?.trim()) candidatePayload.linkedinUrl = input.linkedinUrl.trim();
-    if (input.source?.trim()) candidatePayload.source = input.source.trim();
-    if (input.candidateStatus?.trim()) candidatePayload.candidateStatus = input.candidateStatus.trim();
-    if (Array.isArray(input.skills) && input.skills.length > 0) {
-      candidatePayload.skills = input.skills;
-    }
-
-    // 2. Create Candidate profile with jobId in payload (backend handles job linking)
-    const createCandRes = await fetch(`${API_BASE_URL}/api/v1/candidates`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(candidatePayload),
-    });
-
-    if (!createCandRes.ok) {
-      const errData = await createCandRes.json().catch(() => ({}));
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
       const msg = Array.isArray(errData.message)
         ? errData.message.join(", ")
-        : errData.message || "Failed to create candidate profile on backend.";
+        : errData.message || `Failed to create candidate profile on backend (${res.status}).`;
       return { applicationId: "", error: msg };
     }
 
-    const candidate = await createCandRes.json();
-    const targetJobId = input.jobId?.trim();
+    const candidate = await res.json();
 
     revalidatePath("/");
+    revalidatePath("/candidates");
     revalidatePath("/[objectApiName]");
     return {
       applicationId: targetJobId ? `${candidate.id}::${targetJobId}` : candidate.id,
       candidateId: candidate.id,
+      candidate,
     };
-  } catch (err) {
+  } catch (err: any) {
     console.error("[ingestCandidateAction]", err);
-    return { applicationId: "", error: err instanceof Error ? err.message : "Failed to ingest candidate." };
+    return { applicationId: "", error: err.message || "Failed to ingest candidate." };
   }
 }
 

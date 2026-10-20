@@ -109,10 +109,9 @@ export default function AddCandidateModal({
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (file) {
-      const allowedExtensions = [".pdf", ".doc", ".docx"];
-      const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
-      if (!allowedExtensions.includes(ext)) {
-        onToast("Invalid File Type", "Please upload a PDF, DOC, or DOCX file.", "ban");
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      if (!isPdf) {
+        onToast("Invalid File Type", "Please upload a valid PDF document (.pdf).", "ban");
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
@@ -129,6 +128,10 @@ export default function AddCandidateModal({
 
   async function handleSave() {
     // Validation
+    if (!resumeFile) {
+      onToast("Resume Required", "Please attach a PDF resume to proceed.", "ban");
+      return;
+    }
     if (!selectedJobId) {
       onToast("Selection Required", "Please select an associated Job.", "ban");
       return;
@@ -163,23 +166,25 @@ export default function AddCandidateModal({
       .map((s) => s.trim())
       .filter(Boolean);
 
-    const result = await ingestCandidateAction({
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      email: email.trim(),
-      phone: phone.trim() || undefined,
-      currentLocation: currentLocation.trim() || undefined,
-      totalExperience: totalExperience ? parseFloat(totalExperience) : undefined,
-      currentCompany: currentCompany.trim() || undefined,
-      currentDesignation: currentDesignation.trim() || undefined,
-      linkedinUrl: linkedinUrl.trim() || undefined,
-      source,
-      candidateStatus,
-      skills: parsedSkills,
-      jobId: selectedJobId,
-      department: selectedJob?.department || "Engineering",
-      role: currentDesignation.trim() || selectedJob?.title || "Candidate",
-    });
+    // Build FormData with PDF attached under key 'resume'
+    const formData = new FormData();
+    formData.append("resume", resumeFile);
+    formData.append("firstName", firstName.trim());
+    formData.append("lastName", lastName.trim());
+    formData.append("email", email.trim().toLowerCase());
+    formData.append("jobId", selectedJobId.trim());
+
+    if (phone.trim()) formData.append("phone", phone.trim());
+    if (currentLocation.trim()) formData.append("currentLocation", currentLocation.trim());
+    if (totalExperience) formData.append("totalExperience", totalExperience.trim());
+    if (currentCompany.trim()) formData.append("currentCompany", currentCompany.trim());
+    if (currentDesignation.trim()) formData.append("currentDesignation", currentDesignation.trim());
+    if (linkedinUrl.trim()) formData.append("linkedinUrl", linkedinUrl.trim());
+    if (source) formData.append("source", source);
+    if (candidateStatus) formData.append("candidateStatus", candidateStatus);
+    formData.append("skills", JSON.stringify(parsedSkills));
+
+    const result = await ingestCandidateAction(formData);
 
     if (result.error) {
       onToast("Error Adding Candidate", result.error, "circle-exclamation");
@@ -187,7 +192,11 @@ export default function AddCandidateModal({
       return;
     }
 
-    const candidateId = result.candidateId || result.applicationId?.split("::")[0] || `cnd-${Date.now()}`;
+    const candidateId =
+      result.candidateId ||
+      result.candidate?.id ||
+      result.applicationId?.split("::")[0] ||
+      `cnd-${Date.now()}`;
 
     const newCandidate: Candidate = {
       id: candidateId,
@@ -212,6 +221,10 @@ export default function AddCandidateModal({
       proposedSalary: 0,
       proposedEquity: 0,
       jobId: selectedJobId,
+      resumeUrl: result.candidate?.resumeUrl,
+      resumeFileId: result.candidate?.resumeFileId,
+      resumePreviewUrl: result.candidate?.resumePreviewUrl,
+      resumeDownloadUrl: result.candidate?.resumeDownloadUrl,
       scorecard: {
         technicalScore: 0,
         systemScore: 0,
@@ -545,16 +558,16 @@ export default function AddCandidateModal({
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                 <i className="fa-solid fa-file-pdf text-red-500" />
-                <span>Resume Document</span>
+                <span>Resume Document <span className="text-red-500">*</span></span>
               </label>
-              <span className="text-[11px] text-slate-400 dark:text-slate-500">PDF, DOC, DOCX (Max 10MB)</span>
+              <span className="text-[11px] text-slate-400 dark:text-slate-500">PDF only (Max 10MB)</span>
             </div>
 
             {/* Hidden file input */}
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.doc,.docx"
+              accept=".pdf,application/pdf"
               onChange={handleFileChange}
               className="hidden"
             />

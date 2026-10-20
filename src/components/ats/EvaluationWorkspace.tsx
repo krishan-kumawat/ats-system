@@ -345,7 +345,8 @@ export default function EvaluationWorkspace({
   const source = record.source || candidate.source || candidate.sourceTag || "LinkedIn";
   const candidateStatus = record.candidateStatus || candidate.candidateStatus || "NEW";
   const linkedinUrl = record.linkedinUrl || candidate.linkedinUrl || "";
-  const resumeUrl = record.resumeUrl || candidate.resumeUrl || "";
+  const resumeUrl = record.resumeUrl || record.resumePreviewUrl || candidate.resumeUrl || candidate.resumePreviewUrl || "";
+  const resumeDownloadUrl = record.resumeDownloadUrl || candidate.resumeDownloadUrl || "";
   const skillsList: string[] = Array.isArray(record.skills)
     ? record.skills
     : Array.isArray(candidate.skills)
@@ -597,16 +598,30 @@ export default function EvaluationWorkspace({
             <div className="border-b border-slate-100 dark:border-slate-800/60 pb-2 flex items-center gap-3">
               <span className="text-slate-400 dark:text-slate-500 font-medium w-36 sm:w-40 flex-shrink-0">Resume / CV</span>
               {resumeUrl ? (
-                <a
-                  href={resumeUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1.5"
-                >
-                  <i className="fa-solid fa-file-pdf text-rose-500" />
-                  <span>View Resume</span>
-                  <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" />
-                </a>
+                <div className="flex items-center gap-3">
+                  <a
+                    href={resumeUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1.5"
+                  >
+                    <i className="fa-solid fa-file-pdf text-rose-500" />
+                    <span>View Resume</span>
+                    <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" />
+                  </a>
+                  {resumeDownloadUrl && (
+                    <a
+                      href={resumeDownloadUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 text-xs flex items-center gap-1 hover:underline"
+                      title="Download PDF"
+                    >
+                      <i className="fa-solid fa-download text-[11px]" />
+                      <span>Download</span>
+                    </a>
+                  )}
+                </div>
               ) : (
                 <span className="text-slate-400 italic">Not Uploaded</span>
               )}
